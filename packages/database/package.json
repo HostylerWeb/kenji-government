@@ -1,0 +1,29 @@
+{
+  "name": "@kenji-government/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "tsx prisma/seed.ts",
+    "studio": "prisma studio",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@kenji-government/shared": "*",
+    "@prisma/client": "^6.9.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^16.5.0",
+    "prisma": "^6.9.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

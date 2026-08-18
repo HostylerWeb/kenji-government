@@ -1,0 +1,34 @@
+{
+  "name": "kenji-government",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev -w @kenji-government/api",
+    "dev:ingest": "npm run dev:ingest -w @kenji-government/api",
+    "dev:worker": "npm run dev -w @kenji-government/worker",
+    "dev:web": "npm run dev -w @kenji-government/web",
+    "build": "npm run build -w @kenji-government/database && npm run build --workspaces --if-present",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\" --max-warnings 0",
+    "typecheck": "npm run build -w @kenji-government/database && npm run build -w @kenji-government/shared && npm run build -w @kenji-government/api && npm run build -w @kenji-government/worker && npm run typecheck -w @kenji-government/web",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "test": "npm run test -w @kenji-government/shared",
+    "db:generate": "npm run generate -w @kenji-government/database",
+    "db:migrate": "npm run migrate -w @kenji-government/database",
+    "db:seed": "npm run seed -w @kenji-government/database",
+    "db:studio": "npm run studio -w @kenji-government/database"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "eslint": "^9.28.0",
+    "prettier": "^3.5.3",
+    "typescript-eslint": "^8.33.0"
+  }
+}

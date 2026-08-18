@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum user_role {
+  admin
+  supervisor
+  analyst
+  auditor
+}
+
+enum operator_status {
+  active
+  suspended
+  revoked
+  pending
+}
+
+enum compliance_status {
+  compliant
+  at_risk
+  non_compliant
+}
+
+enum operator_site_status {
+  active
+  suspended
+}
+
+enum licence_type {
+  raffle
+  competition
+  mixed
+}
+
+enum licence_status {
+  active
+  expired
+  suspended
+  revoked
+}
+
+enum submission_status {
+  pending
+  approved
+  rejected
+  revision_requested
+}
+
+enum ingest_event_status {
+  received
+  processing
+  processed
+  failed
+}
+
+enum enforcement_case_type {
+  warning
+  fine
+  investigation
+  suspension
+}
+
+enum enforcement_case_status {
+  open
+  resolved
+  escalated
+  closed
+}
+
+enum enforcement_action_type {
+  notice
+  warning
+  fine
+  suspension
+  revocation
+}
+
+enum document_type {
+  trading_licence
+  registration
+  tax_certificate
+  audit_report
+  insurance
+  other
+}
+
+model users {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  password_hash String
+  full_name     String
+  role          user_role @default(analyst)
+  is_active     Boolean   @default(true)
+  last_login_at DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @updatedAt @db.Timestamptz(6)
+
+  audit_logs            audit_logs[]
+  reviewed_submissions  submissions[] @relation("submission_reviewer")
+  opened_cases          enforcement_cases[]
+  enforcement_actions   enforcement_actions[]
+  uploaded_documents    documents[]
+}
+
+model audit_logs {
+  id          String   @id @default(uuid()) @db.Uuid
+  user_id     String?  @db.Uuid
+  action      String
+  entity_type String
+  entity_id   String?  @db.Uuid
+  metadata    Json?
+  ip_address  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  user users? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+}
+
+model operators {
+  id                   String            @id @default(uuid()) @db.Uuid
+  external_id          String            @unique
+  legal_name           String
+  trading_name         String
+  registration_number  String?
+  beneficial_owner     String?
+  email                String?
+  phone                String?
+  county               String?
+  region               String?
+  website              String?
+  status               operator_status   @default(active)
+  compliance_status    compliance_status @default(compliant)
+  risk_score           Int               @default(0)
+  annual_ggr           Decimal?          @db.Decimal(18, 2)
+  tax_paid             Decimal?          @db.Decimal(18, 2)
+  tax_due              Decimal?          @db.Decimal(18, 2)
+  monthly_tickets      Int?
+  last_submission_at   DateTime?         @db.Timestamptz(6)
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime          @updatedAt @db.Timestamptz(6)
+
+  operator_sites            operator_sites[]
+  licences                  licences[]
+  submissions               submissions[]
+  enforcement_cases         enforcement_cases[]
+  documents                 documents[]
+  operator_monthly_snapshots operator_monthly_snapshots[]
+  live_activity_feed         live_activity_feed[]
+}
+
+model operator_sites {
+  id          String               @id @default(uuid()) @db.Uuid
+  operator_id String               @db.Uuid
+  domain      String
+  site_name   String
+  is_primary  Boolean              @default(false)
+  status      operator_site_status @default(active)
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime             @updatedAt @db.Timestamptz(6)
+
+  operator        operators         @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  api_credentials api_credentials[]
+  ingest_events   ingest_events[]
+
+  @@index([operator_id])
+}
+
+model licences {
+  id             String         @id @default(uuid()) @db.Uuid
+  operator_id    String         @db.Uuid
+  licence_number String         @unique
+  licence_type   licence_type   @default(raffle)
+  issued_at      DateTime       @db.Date
+  expires_at     DateTime       @db.Date
+  status         licence_status @default(active)
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime       @updatedAt @db.Timestamptz(6)
+
+  operator operators @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+
+  @@index([operator_id])
+}
+
+model api_credentials {
+  id              String    @id @default(uuid()) @db.Uuid
+  operator_site_id String   @db.Uuid
+  api_key_hash    String
+  api_key_prefix  String
+  hmac_secret_hash String
+  hmac_secret_encrypted String?
+  allowed_ips     Json?
+  is_active       Boolean   @default(true)
+  last_used_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+
+  operator_site operator_sites @relation(fields: [operator_site_id], references: [id], onDelete: Cascade)
+
+  @@index([operator_site_id])
+}
+
+model reporting_periods {
+  id        String   @id @default(uuid()) @db.Uuid
+  year      Int
+  month     Int
+  label     String
+  starts_at DateTime @db.Date
+  ends_at   DateTime @db.Date
+
+  submissions                submissions[]
+  operator_monthly_snapshots operator_monthly_snapshots[]
+
+  @@unique([year, month])
+}
+
+model submissions {
+  id                   String            @id @default(uuid()) @db.Uuid
+  operator_id          String            @db.Uuid
+  reporting_period_id  String            @db.Uuid
+  tickets_sold         BigInt            @default(0)
+  gross_revenue        Decimal           @default(0) @db.Decimal(18, 2)
+  prizes_paid          Decimal           @default(0) @db.Decimal(18, 2)
+  expenses             Decimal           @default(0) @db.Decimal(18, 2)
+  gross_gaming_revenue Decimal           @default(0) @db.Decimal(18, 2)
+  tax_due              Decimal           @default(0) @db.Decimal(18, 2)
+  tax_paid             Decimal           @default(0) @db.Decimal(18, 2)
+  tax_outstanding      Decimal           @default(0) @db.Decimal(18, 2)
+  status               submission_status @default(pending)
+  submitted_at         DateTime?         @db.Timestamptz(6)
+  reviewed_by          String?           @db.Uuid
+  reviewed_at          DateTime?         @db.Timestamptz(6)
+  notes                String?
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime          @updatedAt @db.Timestamptz(6)
+
+  operator          operators         @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  reporting_period  reporting_periods @relation(fields: [reporting_period_id], references: [id])
+  reviewer          users?            @relation("submission_reviewer", fields: [reviewed_by], references: [id])
+
+  @@index([operator_id])
+  @@index([status])
+}
+
+model ingest_events {
+  id               String              @id @default(uuid()) @db.Uuid
+  operator_site_id String              @db.Uuid
+  event_type       String
+  idempotency_key  String              @unique
+  raw_payload      Json
+  status           ingest_event_status @default(received)
+  error_message    String?
+  processed_at     DateTime?           @db.Timestamptz(6)
+  created_at       DateTime            @default(now()) @db.Timestamptz(6)
+
+  operator_site operator_sites @relation(fields: [operator_site_id], references: [id], onDelete: Cascade)
+
+  @@index([operator_site_id])
+  @@index([status])
+}
+
+model live_activity_feed {
+  id          String   @id @default(uuid()) @db.Uuid
+  operator_id String   @db.Uuid
+  event_type  String
+  summary     String
+  amount      Decimal? @db.Decimal(18, 2)
+  metadata    Json     @default("{}")
+  occurred_at DateTime @db.Timestamptz(6)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  operator operators @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+
+  @@index([operator_id, occurred_at])
+  @@index([occurred_at])
+}
+
+model enforcement_cases {
+  id          String                  @id @default(uuid()) @db.Uuid
+  operator_id String                  @db.Uuid
+  case_number String                  @unique
+  case_type   enforcement_case_type
+  title       String
+  description String?
+  status      enforcement_case_status @default(open)
+  opened_by   String?                 @db.Uuid
+  resolved_at DateTime?               @db.Timestamptz(6)
+  created_at  DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime                @updatedAt @db.Timestamptz(6)
+
+  operator  operators             @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  opener    users?                @relation(fields: [opened_by], references: [id])
+  actions   enforcement_actions[]
+
+  @@index([operator_id])
+  @@index([status])
+}
+
+model enforcement_actions {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  enforcement_case_id String                  @db.Uuid
+  action_type         enforcement_action_type
+  details             String?
+  fine_amount         Decimal?                @db.Decimal(18, 2)
+  performed_by        String?                 @db.Uuid
+  created_at          DateTime                @default(now()) @db.Timestamptz(6)
+
+  case       enforcement_cases @relation(fields: [enforcement_case_id], references: [id], onDelete: Cascade)
+  performer  users?            @relation(fields: [performed_by], references: [id])
+}
+
+model documents {
+  id            String        @id @default(uuid()) @db.Uuid
+  operator_id   String        @db.Uuid
+  document_type document_type
+  title         String
+  file_path     String
+  file_size     BigInt?
+  mime_type     String?
+  uploaded_by   String?       @db.Uuid
+  uploaded_at   DateTime      @default(now()) @db.Timestamptz(6)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+
+  operator operators @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  uploader users?    @relation(fields: [uploaded_by], references: [id])
+
+  @@index([operator_id])
+}
+
+model operator_monthly_snapshots {
+  id                   String   @id @default(uuid()) @db.Uuid
+  operator_id          String   @db.Uuid
+  reporting_period_id  String   @db.Uuid
+  gross_gaming_revenue Decimal  @default(0) @db.Decimal(18, 2)
+  tax_paid             Decimal  @default(0) @db.Decimal(18, 2)
+  tickets_sold         BigInt   @default(0)
+  updated_at           DateTime @updatedAt @db.Timestamptz(6)
+
+  operator         operators         @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  reporting_period reporting_periods @relation(fields: [reporting_period_id], references: [id])
+
+  @@unique([operator_id, reporting_period_id])
+}

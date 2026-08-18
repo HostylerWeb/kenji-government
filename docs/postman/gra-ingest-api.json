@@ -1,0 +1,93 @@
+{
+  "info": {
+    "name": "GRA Operator Ingest API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "ingest_base", "value": "http://localhost:4001/v1" },
+    { "key": "api_key", "value": "gra_sandbox_op001_devkey0001" },
+    { "key": "hmac_secret", "value": "sandbox_hmac_op001_secret_32chars_min" }
+  ],
+  "item": [
+    {
+      "name": "Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "X-Api-Key", "value": "{{api_key}}" },
+          { "key": "X-Signature", "value": "{{signature}}" },
+          { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": "{{ingest_base}}/status"
+      }
+    },
+    {
+      "name": "Monthly return",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Api-Key", "value": "{{api_key}}" },
+          { "key": "X-Signature", "value": "{{signature}}" },
+          { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reporting_year\": 2026,\n  \"reporting_month\": 7,\n  \"tickets_sold\": 13200,\n  \"gross_revenue\": 54800000,\n  \"prizes_paid\": 27400000,\n  \"expenses\": 6800000,\n  \"gross_gaming_revenue\": 42000000,\n  \"tax_paid\": 5200000\n}"
+        },
+        "url": "{{ingest_base}}/returns/monthly"
+      }
+    },
+    {
+      "name": "Ticket purchased",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Api-Key", "value": "{{api_key}}" },
+          { "key": "X-Signature", "value": "{{signature}}" },
+          { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"purchased\",\n  \"ticket_id\": \"TKT-demo-001\",\n  \"raffle_id\": \"raffle-weekly-001\",\n  \"raffle_name\": \"Weekly Dream Draw\",\n  \"amount\": 500,\n  \"currency\": \"KES\",\n  \"purchased_at\": \"2026-08-18T10:30:00+03:00\"\n}"
+        },
+        "url": "{{ingest_base}}/events/ticket"
+      }
+    },
+    {
+      "name": "Payment completed",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Api-Key", "value": "{{api_key}}" },
+          { "key": "X-Signature", "value": "{{signature}}" },
+          { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"completed\",\n  \"payment_id\": \"PAY-demo-001\",\n  \"amount\": 500,\n  \"currency\": \"KES\",\n  \"method\": \"mpesa\",\n  \"reference\": \"QGH123456\",\n  \"occurred_at\": \"2026-08-18T10:30:01+03:00\"\n}"
+        },
+        "url": "{{ingest_base}}/events/payment"
+      }
+    },
+    {
+      "name": "Operator updated",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Api-Key", "value": "{{api_key}}" },
+          { "key": "X-Signature", "value": "{{signature}}" },
+          { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"field\": \"site_status\",\n  \"previous_value\": \"online\",\n  \"new_value\": \"maintenance\",\n  \"occurred_at\": \"2026-08-18T10:30:00+03:00\"\n}"
+        },
+        "url": "{{ingest_base}}/events/operator-updated"
+      }
+    }
+  ]
+}

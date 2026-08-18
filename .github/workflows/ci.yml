@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kenji_government
+          POSTGRES_PASSWORD: kenji_government
+          POSTGRES_DB: kenji_government
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd "pg_isready -U kenji_government -d kenji_government"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://kenji_government:kenji_government@localhost:5436/kenji_government?schema=public
+      JWT_SECRET: ci-test-secret
+      JWT_REFRESH_SECRET: ci-test-refresh-secret
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+
+      - run: npm run db:generate -w @kenji-government/database
+      - run: npx prisma migrate deploy
+        working-directory: packages/database
+
+      - run: npm run build
