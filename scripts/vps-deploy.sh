@@ -57,6 +57,11 @@ sed -i "s|JWT_SECRET=.*|JWT_SECRET=\"${JWT_SECRET}\"|" .env
 sed -i "s|JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=\"${JWT_REFRESH}\"|" .env
 sed -i "s|INGEST_ENCRYPTION_KEY=.*|INGEST_ENCRYPTION_KEY=\"${INGEST_KEY}\"|" .env
 
+grep -q '^AUTH_EMAIL_OTP_DISABLED=' .env || echo 'AUTH_EMAIL_OTP_DISABLED=true' >> .env
+grep -q '^AUTH_MFA_DISABLED=' .env || echo 'AUTH_MFA_DISABLED=true' >> .env
+sed -i 's|^AUTH_EMAIL_OTP_DISABLED=.*|AUTH_EMAIL_OTP_DISABLED=true|' .env
+sed -i 's|^AUTH_MFA_DISABLED=.*|AUTH_MFA_DISABLED=true|' .env
+
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
@@ -72,6 +77,8 @@ npm run db:seed
 mkdir -p apps/web
 echo "NEXT_PUBLIC_API_URL=https://${MAIN_DOMAIN}/api" > apps/web/.env.local
 echo "NEXT_PUBLIC_SESSION_IDLE_MS=1800000" >> apps/web/.env.local
+echo "NEXT_PUBLIC_AUTH_EMAIL_OTP_DISABLED=true" >> apps/web/.env.local
+echo "NEXT_PUBLIC_AUTH_MFA_DISABLED=true" >> apps/web/.env.local
 
 # PM2
 if ! command -v pm2 >/dev/null; then

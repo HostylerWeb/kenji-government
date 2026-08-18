@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
 import { loginRequest, verifyEmailOtpRequest, verifyMfaRequest } from "@/lib/api";
+import { AUTH_EMAIL_OTP_DISABLED_MESSAGE } from "@kenji-government/shared";
 import {
   getDeviceFingerprint,
   getUserAgentLabel,
@@ -26,6 +27,9 @@ export default function LoginPage() {
   const [step, setStep] = useState<LoginStep>("credentials");
   const [challengeToken, setChallengeToken] = useState("");
   const [otpCode, setOtpCode] = useState("");
+
+  const emailOtpPilotDisabled =
+    process.env.NEXT_PUBLIC_AUTH_EMAIL_OTP_DISABLED === "true";
 
   useEffect(() => {
     if (getStoredAuth()) {
@@ -192,14 +196,24 @@ export default function LoginPage() {
 
             {step === "email_otp" && (
               <form onSubmit={handleEmailOtpVerify} className="space-y-4">
-                <p className="text-sm text-muted">{info}</p>
+                <div
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
+                >
+                  {emailOtpPilotDisabled ? (
+                    <p>{AUTH_EMAIL_OTP_DISABLED_MESSAGE}</p>
+                  ) : (
+                    <p>{info}</p>
+                  )}
+                </div>
                 <input
                   type="text"
                   inputMode="numeric"
                   maxLength={8}
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\s/g, ""))}
-                  placeholder="Email verification code"
+                  placeholder={
+                    emailOtpPilotDisabled ? "0000" : "Email verification code"
+                  }
                   className="w-full rounded-lg border border-border px-3 py-2 text-center text-lg tracking-widest outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   required
                 />

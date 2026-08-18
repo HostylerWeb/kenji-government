@@ -10,6 +10,10 @@ import { SettingsService } from "../settings/settings.service";
 const OTP_PREFIX = "gra:auth:email-otp";
 const OTP_TTL_SECONDS = 600;
 
+function isEmailOtpDisabled(): boolean {
+  return process.env.AUTH_EMAIL_OTP_DISABLED === "true";
+}
+
 @Injectable()
 export class EmailOtpService {
   private readonly logger = new Logger(EmailOtpService.name);
@@ -20,6 +24,9 @@ export class EmailOtpService {
   ) {}
 
   async sendLoginOtp(userId: string, email: string): Promise<void> {
+    if (isEmailOtpDisabled()) {
+      return;
+    }
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const client = this.redis.getClient();
     await client.setex(`${OTP_PREFIX}:${userId}`, OTP_TTL_SECONDS, code);
@@ -55,6 +62,15 @@ export class EmailOtpService {
   }
 
   async verifyLoginOtp(userId: string, code: string): Promise<void> {
+    const normalized = code.replace(/\s/g, "");
+
+    if (isEmailOtpDisabled()) {
+      if (normalized !== "0000") {
+        throw new UnauthorizedException("Invalid verification code");
+      }
+      return;
+    }
+
     const client = this.redis.getClient();
     const key = `${OTP_PREFIX}:${userId}`;
     const stored = await client.get(key);
@@ -63,7 +79,6 @@ export class EmailOtpService {
       throw new UnauthorizedException("Verification code expired or invalid");
     }
 
-    const normalized = code.replace(/\s/g, "");
     if (stored !== normalized) {
       throw new UnauthorizedException("Invalid verification code");
     }

@@ -94,6 +94,12 @@ export class MfaService {
   }
 
   async beginSetup(userId: string) {
+    if (process.env.AUTH_MFA_DISABLED === "true") {
+      throw new UnauthorizedException(
+        "Google Authenticator is disabled during pilot testing",
+      );
+    }
+
     const user = await this.prisma.client.users.findUnique({
       where: { id: userId },
     });

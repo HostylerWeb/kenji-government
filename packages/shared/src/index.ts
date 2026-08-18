@@ -1,4 +1,5 @@
 export * from "./auth";
+export * from "./auth-security";
 export * from "./operators";
 export * from "./ingest";
 export * from "./crypto";

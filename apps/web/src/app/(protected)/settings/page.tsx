@@ -57,6 +57,10 @@ export default function SettingsPage() {
     user?.role === "admin" || user?.role === "super_admin";
   const isSuperAdmin = user?.role === "super_admin";
   const assignableRoles = isSuperAdmin ? ALL_ROLES : ADMIN_ASSIGNABLE;
+  const mfaPilotDisabled =
+    process.env.NEXT_PUBLIC_AUTH_MFA_DISABLED === "true";
+  const emailOtpPilotDisabled =
+    process.env.NEXT_PUBLIC_AUTH_EMAIL_OTP_DISABLED === "true";
 
   useEffect(() => {
     if (!token) return;
@@ -181,8 +185,9 @@ export default function SettingsPage() {
               <input
                 type="checkbox"
                 checked={securityPrefs.google_authenticator_enabled}
+                disabled={mfaPilotDisabled}
                 onChange={async (e) => {
-                  if (!token) return;
+                  if (!token || mfaPilotDisabled) return;
                   if (e.target.checked) {
                     setShowMfaSetup(true);
                     return;
@@ -206,6 +211,14 @@ export default function SettingsPage() {
                 <br />
                 <span className="text-muted">
                   Use an authenticator app for a 6-digit code at sign-in.
+                  {mfaPilotDisabled && (
+                    <>
+                      <br />
+                      <span className="text-amber-800">
+                        Disabled for now during pilot testing.
+                      </span>
+                    </>
+                  )}
                 </span>
               </span>
             </label>
@@ -214,8 +227,9 @@ export default function SettingsPage() {
               <input
                 type="checkbox"
                 checked={securityPrefs.email_otp_new_device_enabled}
+                disabled={emailOtpPilotDisabled}
                 onChange={async (e) => {
-                  if (!token) return;
+                  if (!token || emailOtpPilotDisabled) return;
                   try {
                     const prefs = await updateSecurityPreferences(token, {
                       email_otp_new_device_enabled: e.target.checked,
@@ -234,13 +248,22 @@ export default function SettingsPage() {
                 <span className="text-muted">
                   When we detect an unfamiliar device fingerprint, send a one-time
                   code to your email before sign-in completes.
+                  {emailOtpPilotDisabled && (
+                    <>
+                      <br />
+                      <span className="text-amber-800">
+                        Disabled for now — use 0000 at sign-in during pilot
+                        testing.
+                      </span>
+                    </>
+                  )}
                 </span>
               </span>
             </label>
           </div>
         )}
 
-        {showMfaSetup && (
+        {showMfaSetup && !mfaPilotDisabled && (
           <div className="mt-4 border-t border-border pt-4">
             <MfaSetupForm
               onComplete={(response) => {

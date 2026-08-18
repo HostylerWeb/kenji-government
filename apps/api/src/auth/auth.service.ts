@@ -11,6 +11,9 @@ import type {
   SecurityPreferences,
   SecurityPreferencesInput,
 } from "@kenji-government/shared";
+import {
+  AUTH_EMAIL_OTP_DISABLED_MESSAGE,
+} from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { MfaService } from "./mfa.service";
@@ -25,6 +28,14 @@ type LoginChallengePayload = {
   email_otp_verified: boolean;
   user_agent_label?: string;
 };
+
+function isMfaDisabled(): boolean {
+  return process.env.AUTH_MFA_DISABLED === "true";
+}
+
+function isEmailOtpDisabled(): boolean {
+  return process.env.AUTH_EMAIL_OTP_DISABLED === "true";
+}
 
 @Injectable()
 export class AuthService {
@@ -69,10 +80,12 @@ export class AuthService {
       fpHash &&
       !deviceTrusted;
 
-    const needsTotp = user.mfa_enabled;
+    const needsTotp = user.mfa_enabled && !isMfaDisabled();
 
     if (needsEmailOtp) {
-      await this.emailOtp.sendLoginOtp(user.id, user.email);
+      if (!isEmailOtpDisabled()) {
+        await this.emailOtp.sendLoginOtp(user.id, user.email);
+      }
       return {
         status: "email_otp_required",
         challenge_token: this.issueLoginChallenge(
@@ -83,7 +96,9 @@ export class AuthService {
           userAgentLabel,
         ),
         user: authUser,
-        message: "Verification code sent to your email address.",
+        message: isEmailOtpDisabled()
+          ? AUTH_EMAIL_OTP_DISABLED_MESSAGE
+          : "Verification code sent to your email address.",
       };
     }
 
@@ -124,7 +139,7 @@ export class AuthService {
 
     const authUser = this.mfa.toAuthUser(user);
 
-    if (user.mfa_enabled) {
+    if (user.mfa_enabled && !isMfaDisabled()) {
       return {
         status: "mfa_required",
         challenge_token: this.issueLoginChallenge(
@@ -242,6 +257,11 @@ export class AuthService {
     } = {};
 
     if (input.email_otp_new_device_enabled !== undefined) {
+      if (input.email_otp_new_device_enabled && isEmailOtpDisabled()) {
+        throw new UnauthorizedException(
+          "Email verification on new devices is disabled during pilot testing",
+        );
+      }
       data.email_otp_new_device_enabled = input.email_otp_new_device_enabled;
     }
 
@@ -255,6 +275,11 @@ export class AuthService {
         },
       });
     } else if (input.google_authenticator_enabled === true && !user.mfa_enabled) {
+      if (isMfaDisabled()) {
+        throw new UnauthorizedException(
+          "Google Authenticator is disabled during pilot testing",
+        );
+      }
       throw new UnauthorizedException(
         "Complete Google Authenticator setup before enabling",
       );
