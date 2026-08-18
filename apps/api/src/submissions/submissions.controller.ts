@@ -37,6 +37,11 @@ export class SubmissionsController {
     });
   }
 
+  @Get("stats")
+  stats() {
+    return this.submissionsService.statusCounts();
+  }
+
   @Get("export")
   async exportCsv(
     @Res() reply: FastifyReply,

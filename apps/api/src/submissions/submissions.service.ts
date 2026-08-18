@@ -69,6 +69,26 @@ export class SubmissionsService {
     );
   }
 
+  async statusCounts(): Promise<Record<string, number>> {
+    const groups = await this.prisma.client.submissions.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    });
+
+    const counts: Record<string, number> = {
+      approved: 0,
+      pending: 0,
+      revision_requested: 0,
+      rejected: 0,
+    };
+
+    for (const group of groups) {
+      counts[group.status] = group._count._all;
+    }
+
+    return counts;
+  }
+
   async getById(id: string) {
     const submission = await this.prisma.client.submissions.findUnique({
       where: { id },

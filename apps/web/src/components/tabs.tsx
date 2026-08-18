@@ -10,7 +10,7 @@ export function Tabs({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-1 rounded-lg bg-secondary p-1">
+    <div className="flex gap-1 overflow-x-auto rounded-lg bg-secondary p-1">
       {tabs.map((tab) => (
         <button
           key={tab.id}

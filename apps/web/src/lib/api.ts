@@ -313,6 +313,10 @@ export async function getSubmissions(token: string, status?: string) {
   return apiRequest<SubmissionItem[]>(`/submissions${qs}`, { token });
 }
 
+export async function getSubmissionStats(token: string) {
+  return apiRequest<Record<string, number>>("/submissions/stats", { token });
+}
+
 export async function getOperatorSubmissions(token: string, externalId: string) {
   return apiRequest<SubmissionItem[]>(
     `/operators/${externalId}/submissions`,
