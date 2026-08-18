@@ -3,6 +3,7 @@
 set -euo pipefail
 
 VPS_HOST="${VPS_HOST:-root@152.239.119.54}"
+MAIN_DOMAIN="${MAIN_DOMAIN:-srv1781529.hstgr.cloud}"
 DEPLOY_PATH="/var/www/kenji-government"
 OLD_PATH="/var/www/government"
 REPO="https://github.com/HostylerWeb/kenji-government.git"
@@ -69,7 +70,7 @@ npm run db:seed
 
 # Web env
 mkdir -p apps/web
-echo "NEXT_PUBLIC_API_URL=https://compliance.srv1781529.hstgr.cloud/api" > apps/web/.env.local
+echo "NEXT_PUBLIC_API_URL=https://${MAIN_DOMAIN}/api" > apps/web/.env.local
 echo "NEXT_PUBLIC_SESSION_IDLE_MS=1800000" >> apps/web/.env.local
 
 # PM2
@@ -83,14 +84,14 @@ pm2 save
 
 # Apache proxy config
 if [ -f deploy/apache/console.conf.template ]; then
-  cp deploy/apache/console.conf.template /etc/apache2/sites-available/gra-console.conf
-  a2enmod proxy proxy_http ssl headers 2>/dev/null || true
-  a2dissite compliance.conf compliance-le-ssl.conf 000-default.conf 2>/dev/null || true
-  a2ensite gra-console.conf
+cp deploy/apache/console.conf.template /etc/apache2/sites-available/gra-console.conf
+a2enmod proxy proxy_http ssl headers rewrite 2>/dev/null || true
+a2dissite byanydream.conf byanydream-le-ssl.conf compliance.conf compliance-le-ssl.conf 000-default.conf 2>/dev/null || true
+a2ensite gra-console.conf
   systemctl reload apache2
 fi
 
 echo "Deploy complete."
 REMOTE
 
-echo "Done. Test: https://compliance.srv1781529.hstgr.cloud/login"
+echo "Done. Test: https://${MAIN_DOMAIN}/login"

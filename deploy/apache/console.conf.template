@@ -1,10 +1,11 @@
-# Apache reverse proxy for GRA console (VPS uses Apache + Let's Encrypt)
+# GRA staff console — main domain (Apache + Let's Encrypt)
 <VirtualHost *:443>
-    ServerName compliance.srv1781529.hstgr.cloud
+    ServerName srv1781529.hstgr.cloud
 
     SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/compliance.srv1781529.hstgr.cloud/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/compliance.srv1781529.hstgr.cloud/privkey.pem
+    SSLCertificateFile /etc/letsencrypt/live/srv1781529.hstgr.cloud/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/srv1781529.hstgr.cloud/privkey.pem
+    Include /etc/letsencrypt/options-ssl-apache.conf
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
@@ -19,4 +20,10 @@
 
     ErrorLog ${APACHE_LOG_DIR}/gra-console-error.log
     CustomLog ${APACHE_LOG_DIR}/gra-console-access.log combined
+</VirtualHost>
+
+# Redirect HTTP to HTTPS on main domain
+<VirtualHost *:80>
+    ServerName srv1781529.hstgr.cloud
+    Redirect permanent / https://srv1781529.hstgr.cloud/
 </VirtualHost>

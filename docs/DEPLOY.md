@@ -1,7 +1,7 @@
 # GRA portal — VPS deployment
 
 Deploy path: `/var/www/kenji-government`  
-Staff URL: `https://compliance.srv1781529.hstgr.cloud` (or custom domain)  
+Staff URL: `https://srv1781529.hstgr.cloud` (main domain)  
 Ingest URL: `https://ingest.srv1781529.hstgr.cloud` (planned subdomain)
 
 ## Prerequisites
@@ -52,7 +52,7 @@ Copy templates from `deploy/nginx/` and enable SSL (certbot):
 ## 5. Smoke test
 
 ```bash
-./scripts/production-smoke.sh https://compliance.srv1781529.hstgr.cloud
+./scripts/production-smoke.sh https://srv1781529.hstgr.cloud
 ```
 
 ## 6. Operator production ingest (Phase 9.1)

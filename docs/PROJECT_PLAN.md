@@ -37,7 +37,7 @@ The portal ingests data from **every licensed operator dashboard** (first pilot 
 | Operator ingest API | Not built |
 | Operator real-time ingest link | Built (pilot) |
 | Payment gateway (separate repo) | Not in this project — see `docs/PAYMENT_GATEWAY_PROJECT.md` |
-| Production VPS | Static site only at `compliance.srv1781529.hstgr.cloud` |
+| Production VPS | `https://srv1781529.hstgr.cloud` (main domain) |
 
 The `out/` folder is a **design reference**. The real application will be a full-stack rebuild with live data.
 
@@ -229,7 +229,7 @@ See `ssh.txt` in project root.
 | Host | `152.239.119.54` |
 | User | `root` |
 | Project path | `/var/www/government` (migrate to `/var/www/kenji-government` when full stack is ready) |
-| Current URL | `https://compliance.srv1781529.hstgr.cloud` |
+| Current URL | `https://srv1781529.hstgr.cloud` |
 | Planned URLs | `console.*` (staff), `ingest.*` (operator API) |
 
 ### Software to install on VPS
@@ -273,7 +273,7 @@ GRANT ALL PRIVILEGES ON DATABASE kenji_government TO kenji_government;
 # Staff console
 server {
     listen 443 ssl;
-    server_name compliance.srv1781529.hstgr.cloud;
+    server_name srv1781529.hstgr.cloud;
     location / {
         proxy_pass http://127.0.0.1:3000;  # Next.js
     }
@@ -1321,7 +1321,7 @@ Phase 9 (pilot & scale)
 - **UI/UX plan:** `docs/UI_UX_PLAN.md`
 - Similar operator model: `/var/www/compgo` (raffle/competition platform)
 - Operator integration kit: `integrations/operator/` (pilot VPS path: `/var/www/byanydream`)
-- VPS static site: `https://compliance.srv1781529.hstgr.cloud`
+- VPS: `https://srv1781529.hstgr.cloud`
 - Payment gateway (separate project): `docs/PAYMENT_GATEWAY_PROJECT.md`
 - **Operator raffle platform (build after):** `/var/www/Kenji-raffle/docs/PROJECT_PLAN_2.md`
 - SSH details: `ssh.txt`
