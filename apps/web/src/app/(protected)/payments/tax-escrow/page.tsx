@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PaymentsNav } from "@/components/payments-nav";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getTaxEscrowSummary,
@@ -89,6 +90,7 @@ export default function TaxEscrowPage() {
       {summary && summary.withdrawal_batches.length > 0 && (
         <Card className="mb-6">
           <h2 className="mb-3 text-base font-semibold">Withdrawal history</h2>
+          <TableScroll>
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-border text-muted">
               <tr>
@@ -113,11 +115,13 @@ export default function TaxEscrowPage() {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         </Card>
       )}
 
       <Card>
         <h2 className="mb-3 text-base font-semibold">Earmarked entries</h2>
+        <TableScroll>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-border text-muted">
             <tr>
@@ -140,6 +144,7 @@ export default function TaxEscrowPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </Card>
     </AppShell>
   );

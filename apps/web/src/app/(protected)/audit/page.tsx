@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getAuditLogs,
@@ -124,6 +125,7 @@ export default function AuditPage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <TableScroll>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-border bg-secondary/50 text-muted">
             <tr>
@@ -154,6 +156,7 @@ export default function AuditPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </div>
     </AppShell>
   );

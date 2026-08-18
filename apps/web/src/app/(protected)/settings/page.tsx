@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getUsers,
@@ -281,7 +282,7 @@ export default function SettingsPage() {
       {credentials && (
         <Card className="mb-6">
           <h2 className="mb-2 font-semibold">New API Credentials</h2>
-          <pre className="rounded-lg bg-secondary p-3 text-xs">{credentials}</pre>
+          <pre className="overflow-x-auto rounded-lg bg-secondary p-3 text-xs break-all">{credentials}</pre>
           <p className="mt-2 text-xs text-danger">Store securely — shown once only.</p>
         </Card>
       )}
@@ -394,6 +395,7 @@ export default function SettingsPage() {
 
           <Card className="mb-6">
             <h2 className="mb-4 text-base font-semibold">Staff Users</h2>
+            <TableScroll>
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-border text-muted">
                 <tr>
@@ -443,6 +445,7 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
           </Card>
 
           <Card className="mb-6">

@@ -8,7 +8,7 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card p-6 shadow-sm", className)}>
+    <div className={cn("overflow-hidden rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6", className)}>
       {children}
     </div>
   );
@@ -25,7 +25,7 @@ export function CardHeader({
     <div className="mb-4">
       <h3 className="text-sm font-medium text-muted">{title}</h3>
       {description && (
-        <p className="mt-1 text-2xl font-semibold text-foreground">{description}</p>
+        <p className="mt-1 text-xl font-semibold text-foreground sm:text-2xl">{description}</p>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PaymentsNav } from "@/components/payments-nav";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getOperators,
@@ -94,6 +95,7 @@ export default function PaymentTransactionsPage() {
         </div>
       </Card>
       <Card>
+        <TableScroll>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-border text-muted">
             <tr>
@@ -128,6 +130,7 @@ export default function PaymentTransactionsPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </Card>
     </AppShell>
   );

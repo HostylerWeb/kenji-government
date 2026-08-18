@@ -90,7 +90,7 @@ export function MfaSetupForm({
         />
       )}
       <p className="text-center text-xs text-muted">
-        Manual key: <code className="rounded bg-secondary px-1">{setup.secret}</code>
+        Manual key: <code className="rounded bg-secondary px-1 break-all">{setup.secret}</code>
       </p>
       <form onSubmit={handleConfirm} className="space-y-3">
         <input

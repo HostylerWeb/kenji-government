@@ -134,13 +134,13 @@ export default function RegionalPage() {
                   <Link
                     key={row.county}
                     href={`/regional/${encodeURIComponent(row.county)}`}
-                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary/50"
+                    className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <span className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-primary" />
-                      {row.county}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate">{row.county}</span>
                     </span>
-                    <span className="text-muted">
+                    <span className="shrink-0 text-muted text-xs sm:text-sm">
                       {formatNumber(row.operator_count)} ops · {formatKsh(row.annual_ggr)}
                     </span>
                   </Link>

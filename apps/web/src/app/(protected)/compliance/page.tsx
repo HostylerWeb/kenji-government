@@ -58,14 +58,14 @@ export default function CompliancePage() {
             ) : (
               <ul className="space-y-2 text-sm">
                 {data.overdue_submissions.map((s) => (
-                  <li key={s.id} className="flex justify-between gap-4 border-b border-border py-2 last:border-0">
+                  <li key={s.id} className="flex flex-col gap-1 border-b border-border py-2 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <Link
                       href={`/operators/${s.operator_external_id}`}
-                      className="hover:text-primary"
+                      className="min-w-0 break-words hover:text-primary"
                     >
                       {s.operator_name} — {s.period}
                     </Link>
-                    <span className="text-muted">
+                    <span className="shrink-0 text-muted sm:text-right">
                       {formatKsh(s.tax_outstanding)} outstanding
                     </span>
                   </li>

@@ -19,7 +19,7 @@ export function PaymentsNav() {
   return (
     <>
       <GatewayIntegrationBanner />
-      <nav className="mb-6 flex flex-wrap gap-2">
+      <nav className="mb-6 flex flex-wrap gap-2 overflow-x-auto [-webkit-overflow-scrolling:touch] pb-1">
       {links.map((link) => {
         const active = link.exact
           ? pathname === link.href

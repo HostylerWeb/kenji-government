@@ -107,32 +107,33 @@ export default function SubmissionsPage() {
 
   return (
     <AppShell user={user} title="Submissions Queue">
-      <Card className="mb-6">
-        <div className="flex flex-wrap items-center gap-4">
+      <Card className="mb-6 space-y-4">
+        <div className="min-w-0">
           <Tabs
             tabs={tabLabels}
             active={status}
             onChange={(id) => setStatus(id as SubmissionStatus)}
           />
-          <button
-            onClick={() => {
-              if (!token) return;
-              downloadWithAuth(token, `/submissions/export?status=${status}`).then(
-                (blob) => {
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `submissions-${status}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                },
-              );
-            }}
-            className="ml-auto text-sm text-primary hover:underline"
-          >
-            Export CSV
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (!token) return;
+            downloadWithAuth(token, `/submissions/export?status=${status}`).then(
+              (blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `submissions-${status}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              },
+            );
+          }}
+          className="w-full text-sm text-primary hover:underline sm:w-auto"
+        >
+          Export CSV
+        </button>
       </Card>
 
       {error && (

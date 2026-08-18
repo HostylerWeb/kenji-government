@@ -300,25 +300,25 @@ export default function OperatorDetailPage() {
                   <Card>
                     <h2 className="mb-4 text-base font-semibold">Overview</h2>
                     <dl className="space-y-3 text-sm">
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted">Legal name</dt>
-                        <dd className="font-medium">{operator.legal_name}</dd>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                        <dt className="text-muted shrink-0">Legal name</dt>
+                        <dd className="break-words font-medium sm:text-right">{operator.legal_name}</dd>
                       </div>
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted">Beneficial owner</dt>
-                        <dd>{operator.beneficial_owner ?? "—"}</dd>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                        <dt className="text-muted shrink-0">Beneficial owner</dt>
+                        <dd className="break-words sm:text-right">{operator.beneficial_owner ?? "—"}</dd>
                       </div>
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted">County / Region</dt>
-                        <dd>{operator.county ?? "—"} / {operator.region ?? "—"}</dd>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                        <dt className="text-muted shrink-0">County / Region</dt>
+                        <dd className="sm:text-right">{operator.county ?? "—"} / {operator.region ?? "—"}</dd>
                       </div>
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted">Email</dt>
-                        <dd>{operator.email ?? "—"}</dd>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                        <dt className="text-muted shrink-0">Email</dt>
+                        <dd className="break-all sm:text-right">{operator.email ?? "—"}</dd>
                       </div>
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted">Website</dt>
-                        <dd>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                        <dt className="text-muted shrink-0">Website</dt>
+                        <dd className="break-all sm:text-right">
                           {operator.website ? (
                             <a
                               href={operator.website}

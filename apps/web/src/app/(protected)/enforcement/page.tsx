@@ -26,7 +26,7 @@ export default function EnforcementPage() {
   return (
     <AppShell user={user} title="Enforcement Centre">
       <Card className="mb-6">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {["open", "escalated", "resolved", "closed"].map((s) => (
             <button
               key={s}

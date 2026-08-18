@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PaymentsNav } from "@/components/payments-nav";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import { getPaymentOperatorStats } from "@/lib/api";
 import { formatKsh } from "@/lib/utils";
@@ -25,6 +26,7 @@ export default function PaymentOperatorsPage() {
     <AppShell user={user} title="Operator Payment Stats">
       <PaymentsNav />
       <Card>
+        <TableScroll>
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-border text-muted">
             <tr>
@@ -49,6 +51,7 @@ export default function PaymentOperatorsPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </Card>
     </AppShell>
   );

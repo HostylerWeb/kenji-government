@@ -13,7 +13,7 @@ export function GatewayIntegrationBanner() {
         <strong className="font-medium text-foreground">payment gateway</strong>{" "}
         (separate service). The gateway splits tax, holds escrow, and notifies
         GRA via{" "}
-        <code className="rounded bg-secondary px-1 py-0.5 text-xs">
+        <code className="rounded bg-secondary px-1 py-0.5 text-xs break-all">
           POST /v1/gateway/notify
         </code>
         . This console only records and monitors those notifications.

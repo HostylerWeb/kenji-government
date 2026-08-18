@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getReportRuns,
@@ -42,7 +43,8 @@ export default function ReportHistoryPage() {
         {runs.length === 0 ? (
           <p className="text-sm text-muted">No report runs yet.</p>
         ) : (
-          <table className="w-full text-sm">
+          <TableScroll>
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-muted">
                 <th className="py-2 pr-4">Report</th>
@@ -87,6 +89,7 @@ export default function ReportHistoryPage() {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         )}
       </Card>
     </AppShell>

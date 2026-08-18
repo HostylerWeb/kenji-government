@@ -135,7 +135,7 @@ export default function LoginPage() {
       <div className="kenya-stripe" />
       <div className="flex min-h-[calc(100vh-4px)] items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-8">
             <div className="mb-8 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gra-green text-white">
                 <Shield className="h-7 w-7" />

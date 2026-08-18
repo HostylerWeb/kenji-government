@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/card";
 import { PaymentsNav } from "@/components/payments-nav";
+import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
   getAmlAlerts,
@@ -72,6 +73,7 @@ export default function AmlQueuePage() {
       )}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
+          <TableScroll>
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-border text-muted">
               <tr>
@@ -100,6 +102,7 @@ export default function AmlQueuePage() {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         </Card>
 
         <Card className="p-4">
