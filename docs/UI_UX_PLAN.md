@@ -251,6 +251,8 @@ Every template includes: **page title**, **last updated** timestamp on data-heav
 
 ### 5.5 Payment gateway
 
+> **Architecture:** This UI shows data **received from the payment gateway** (separate project). Operators do not pay GRA directly. See `docs/PAYMENT_GATEWAY_PROJECT.md`.
+
 - **Overview:** today’s volume, success %, tax earmarked, available to withdraw
 - **Traffic light** for gateway health (green/amber/red)
 - Transaction table: time, operator, amount, tax split, AML flag icon
@@ -393,11 +395,11 @@ apps/web/
 
 | # | Task | Done |
 |---|------|------|
-| D.1 | Payments overview dashboard | ☐ |
-| D.2 | Transaction log table (tax split columns) | ☐ |
-| D.3 | Tax escrow balance card + withdrawal flow UI | ☐ |
-| D.4 | AML alert queue + review panel | ☐ |
-| D.5 | Per-operator payment stats page | ☐ |
+| D.1 | Payments overview dashboard | ☑ |
+| D.2 | Transaction log table (tax split columns) | ☑ |
+| D.3 | Tax escrow balance card + withdrawal flow UI | ☑ |
+| D.4 | AML alert queue + review panel | ☑ |
+| D.5 | Per-operator payment stats page | ☑ |
 | D.6 | Gateway health indicator in header (optional) | ☐ |
 
 ### UI Phase E — Polish & accessibility (with PROJECT_PLAN Phase 8)

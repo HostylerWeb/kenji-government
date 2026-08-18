@@ -1,4 +1,9 @@
-import type { AuthResponse } from "@kenji-government/shared";
+import type {
+  AuthResponse,
+  LoginResponse,
+  MfaSetupResponse,
+  SecurityPreferences,
+} from "@kenji-government/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -47,12 +52,96 @@ export async function apiRequest<T>(
   return parseResponse<T>(response);
 }
 
-export async function loginRequest(email: string, password: string) {
-  return apiRequest<AuthResponse>("/auth/login", {
+export async function loginRequest(
+  email: string,
+  password: string,
+  deviceFingerprint?: string,
+  userAgentLabel?: string,
+) {
+  return apiRequest<LoginResponse | AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      device_fingerprint: deviceFingerprint,
+      user_agent_label: userAgentLabel,
+    }),
   });
 }
+
+export async function verifyEmailOtpRequest(challengeToken: string, code: string) {
+  return apiRequest<LoginResponse | AuthResponse>("/auth/email-otp/verify", {
+    method: "POST",
+    body: JSON.stringify({ challenge_token: challengeToken, code }),
+  });
+}
+
+export async function verifyMfaRequest(challengeToken: string, code: string) {
+  return apiRequest<AuthResponse>("/auth/mfa/verify", {
+    method: "POST",
+    body: JSON.stringify({ challenge_token: challengeToken, code }),
+  });
+}
+
+export async function setupMfaLogin(challengeToken: string) {
+  return apiRequest<MfaSetupResponse>("/auth/mfa/setup", {
+    method: "POST",
+    body: JSON.stringify({ challenge_token: challengeToken }),
+  });
+}
+
+export async function setupMfaAuthenticated(token: string) {
+  return apiRequest<MfaSetupResponse>("/auth/mfa/setup/authenticated", {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function confirmMfaLogin(challengeToken: string, code: string) {
+  return apiRequest<AuthResponse>("/auth/mfa/confirm", {
+    method: "POST",
+    body: JSON.stringify({ challenge_token: challengeToken, code }),
+  });
+}
+
+export async function confirmMfaAuthenticated(token: string, code: string) {
+  return apiRequest<AuthResponse>("/auth/mfa/confirm/authenticated", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function disableMfa(token: string) {
+  return apiRequest<{ success: boolean }>("/auth/mfa/disable", {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getSecurityPreferences(token: string) {
+  return apiRequest<SecurityPreferences>("/auth/security-preferences", {
+    token,
+  });
+}
+
+export async function updateSecurityPreferences(
+  token: string,
+  prefs: Partial<SecurityPreferences>,
+) {
+  return apiRequest<SecurityPreferences>("/auth/security-preferences", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      google_authenticator_enabled: prefs.google_authenticator_enabled,
+      email_otp_new_device_enabled: prefs.email_otp_new_device_enabled,
+    }),
+  });
+}
+
+export type { MfaSetupResponse, SecurityPreferences };
 
 export interface DashboardStats {
   total_active_operators: number;
@@ -404,6 +493,8 @@ export type LiveCounters = {
   date: string;
   tickets_today: number;
   revenue_today: string;
+  tax_earmarked_today?: string;
+  gateway_payments_today?: number;
   scope: "global" | "operator";
   operator_external_id: string | null;
 };
@@ -665,4 +756,222 @@ export async function exportRegionalDataset(token: string, days = 30) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export type SystemSettings = {
+  tax_rate: number;
+  smtp: {
+    host: string | null;
+    port: number | null;
+    user: string | null;
+    from: string | null;
+    configured: boolean;
+  };
+  report_stakeholder_emails: string[];
+  treasury_account_ref: string | null;
+  can_edit: boolean;
+};
+
+export async function getSystemSettings(token: string) {
+  return apiRequest<SystemSettings>("/settings/system", { token });
+}
+
+export async function updateSystemSettings(
+  token: string,
+  data: Record<string, unknown>,
+) {
+  return apiRequest<SystemSettings>("/settings/system", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export type PaymentsOverview = {
+  payments_today: number;
+  failed_today: number;
+  success_rate: number;
+  gross_today: string;
+  tax_earmarked_today: string;
+  tax_withdrawn_today: string;
+  earmarked_balance: string;
+  earmarked_entry_count: number;
+  tax_rate: number;
+  open_aml_alerts: number;
+  pending_withdrawal_batches: number;
+};
+
+export type PaymentTransaction = {
+  id: string;
+  external_transaction_id: string;
+  ticket_reference: string | null;
+  gross_amount: string;
+  operator_amount: string;
+  tax_amount: string;
+  tax_rate: string;
+  currency: string;
+  status: string;
+  kyc_status: string;
+  aml_risk_score: number;
+  county: string | null;
+  completed_at: string | null;
+  created_at: string;
+  operator_external_id?: string;
+  operator_name?: string;
+  has_aml_alert?: boolean;
+};
+
+export async function getPaymentsOverview(token: string) {
+  return apiRequest<PaymentsOverview>("/payments/overview", { token });
+}
+
+export async function getPaymentTransactions(
+  token: string,
+  params?: {
+    status?: string;
+    operator_external_id?: string;
+    search?: string;
+    aml_flag?: boolean;
+    limit?: number;
+  },
+) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.operator_external_id) {
+    query.set("operator_external_id", params.operator_external_id);
+  }
+  if (params?.search) query.set("search", params.search);
+  if (params?.aml_flag) query.set("aml_flag", "true");
+  if (params?.limit) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  return apiRequest<PaymentTransaction[]>(
+    `/payments/transactions${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export async function getTaxEscrowSummary(token: string) {
+  return apiRequest<{
+    earmarked_balance: string;
+    earmarked_count: number;
+    withdrawn_total: string;
+    withdrawn_count: number;
+    reversed_total: string;
+    withdrawal_batches: Array<{
+      id: string;
+      business_date: string;
+      total_amount: string;
+      destination_account_ref: string;
+      status: string;
+      gateway_batch_id: string | null;
+      completed_at: string | null;
+    }>;
+  }>("/payments/tax-escrow/summary", { token });
+}
+
+export async function getTaxEscrowEntries(
+  token: string,
+  params?: { status?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return apiRequest<
+    Array<{
+      id: string;
+      tax_amount: string;
+      status: string;
+      earmarked_at: string;
+      operator_external_id: string;
+      operator_name: string;
+      gross_amount: string;
+    }>
+  >(`/payments/tax-escrow${qs ? `?${qs}` : ""}`, { token });
+}
+
+export async function getAmlAlerts(token: string, status?: string) {
+  const query = status ? `?status=${status}` : "";
+  return apiRequest<
+    Array<{
+      id: string;
+      alert_type: string;
+      severity: string;
+      status: string;
+      details: Record<string, unknown> | null;
+      created_at: string;
+      operator: { external_id: string; trading_name: string };
+      payment_transaction: {
+        id: string;
+        external_transaction_id: string;
+        gross_amount: string;
+        kyc_status: string;
+        aml_risk_score: number;
+      } | null;
+    }>
+  >(`/payments/aml-alerts${query}`, { token });
+}
+
+export async function updateAmlAlert(
+  token: string,
+  id: string,
+  status: "reviewed" | "escalated" | "closed",
+) {
+  return apiRequest(`/payments/aml-alerts/${id}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function getWithdrawalBatches(token: string) {
+  return apiRequest<
+    Array<{
+      id: string;
+      business_date: string;
+      total_amount: string;
+      destination_account_ref: string;
+      status: string;
+      gateway_batch_id: string | null;
+      completed_at: string | null;
+    }>
+  >("/payments/withdrawals", { token });
+}
+
+export async function escalateAmlToEnforcement(token: string, alertId: string) {
+  return apiRequest<{
+    alert_id: string;
+    enforcement_case_id: string;
+    case_number: string;
+  }>(`/payments/aml-alerts/${alertId}/escalate-to-enforcement`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getPaymentOperatorStats(token: string) {
+  return apiRequest<
+    Array<{
+      operator_external_id: string;
+      trading_name: string;
+      transaction_count: number;
+      failed_count: number;
+      failure_rate: number;
+      gross_total: string;
+      tax_total: string;
+    }>
+  >("/payments/operator-stats", { token });
+}
+
+export async function initiateWithdrawal(token: string, businessDate?: string) {
+  return apiRequest<{
+    id: string;
+    business_date: string;
+    total_amount: string;
+    status: string;
+    entry_count: number;
+  }>("/payments/withdrawals", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ business_date: businessDate }),
+  });
 }

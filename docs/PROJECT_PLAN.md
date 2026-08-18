@@ -21,7 +21,7 @@ The portal ingests data from **every licensed operator dashboard** (first pilot 
 | Tax & levy compliance | Filings, assessments, payments, arrears — plus **real-time tax earmarking** via payment gateway |
 | Enforcement | Notices, warnings, suspensions, licence actions — with audit trail |
 | Player safety & policy data | Anonymised regional analytics: play-safe usage, peak play times, spend patterns — for policy and licensed data partnerships |
-| Payment gateway oversight | Government-owned gateway view (Harambe Pay / Force42 partnership): AML, KYC, transaction visibility for CBK |
+| Payment gateway oversight | Monitor payments, tax earmarking, AML via **separate payment gateway project** + GRA ingest |
 | Reports hub | Stakeholder-facing report library — quick access to standard and custom exports |
 | Auditability | Who did what, when; exports for inspections, UN, charities, data brokers (anonymised datasets) |
 | Multi-site ingest | Tens of operator websites push events to this portal via API + real-time streams |
@@ -36,7 +36,7 @@ The portal ingests data from **every licensed operator dashboard** (first pilot 
 | Database | Not built |
 | Operator ingest API | Not built |
 | Operator real-time ingest link | Built (pilot) |
-| Payment gateway (Harambe Pay) | Not built — Force42 partnership |
+| Payment gateway (separate repo) | Not in this project — see `docs/PAYMENT_GATEWAY_PROJECT.md` |
 | Production VPS | Static site only at `compliance.srv1781529.hstgr.cloud` |
 
 The `out/` folder is a **design reference**. The real application will be a full-stack rebuild with live data.
@@ -111,18 +111,33 @@ When a punter pays e.g. **100 KSH** and tax is **30 KSH** (30%):
 3. By **23:59** same day, GRA can **withdraw** accumulated tax to chosen government account
 4. GRA dashboard shows: earmarked today, withdrawn today, pending balance
 
-### 2.6 Government payment gateway section (Harambe Pay)
+### 2.6 Government payment gateway (separate project)
 
-GRA wants a **government-aligned payment gateway** (similar to ZapPay for Zap) — built by **Force42** as **Harambe Pay**, with partnership revenue share.
+GRA wants a **government-aligned payment gateway** (similar to ZapPay for Zap) — a **standalone NestJS service** (not part of this repo) that raffle operators use to charge tickets. **This console** provides oversight: AML, KYC visibility, tax earmarking records, EOD withdrawal tracking, CBK exports.
 
 | Goal | Detail |
 |------|--------|
-| All operator ticket payments | Route through Harambe Pay when operators use the standard operator dashboard |
-| GRA visibility | Real-time AML, KYC, transaction monitoring for Central Bank of Kenya |
-| Anti–money laundering | Track spending patterns; flag suspicious operator activity |
-| GRA tax slice | Real-time 30% (or configured rate) into sub-account; EOD withdrawal |
-| Partnership | Force42 + GRA revenue share on gateway volume |
-| GRA role | **Insight and oversight** — not running the gateway themselves |
+| Payment processing | **Separate gateway project** — charge, split, escrow, treasury withdrawal |
+| Operator ticket payments | Route through gateway service; gateway notifies GRA ingest |
+| GRA visibility | Real-time AML, KYC, transaction monitoring (this project) |
+| GRA tax slice | Gateway event → GRA records earmarked tax; EOD withdrawal in GRA UI |
+| GRA role | **Insight and oversight** — does not run the card processor |
+
+**Three platforms (do not merge in code):**
+
+| Platform | Connects to | Role |
+|----------|-------------|------|
+| Raffle operator websites | Payment gateway | Sell tickets; charge customers via gateway |
+| Payment gateway (**separate repo**, e.g. `kenji-harambe-pay`) | Raffle sites + GRA ingest | Process payments, split tax, hold escrow, notify GRA |
+| **kenji-government** (this repo) | Gateway notifications only | Staff console — ingest, AML, tax records, reports |
+
+```
+Raffle sites  →  Payment gateway  →  GRA ingest (/v1/gateway/notify)  →  GRA web console
+```
+
+Full integration spec: `docs/PAYMENT_GATEWAY_PROJECT.md`
+
+**Local dev (no gateway repo yet):** external simulator — `tools/gateway-simulator/simulate-charge.sh` (not a charge API on GRA ingest). See `docs/MOCK_GATEWAY.md`.
 
 **New dashboard module: Payment Gateway**
 
@@ -140,7 +155,7 @@ GRA wants a **government-aligned payment gateway** (similar to ZapPay for Zap) �
 3. Reports section
 4. Real-time operator ingest link (demo-critical)
 5. Expanded regional / player safety analytics
-6. Payment gateway module + Harambe Pay integration + real-time tax
+6. Payment gateway **oversight module** (this repo) + **separate gateway project** for processing
 
 
 ## 2. Technology Stack
@@ -888,7 +903,7 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 | 0.3 | Update favicon, OG image, login screen branding | Dev | ☐ |
 | 0.4 | Confirm tax rate (e.g. 30%) and EOD withdrawal rules with GRA | Stakeholders | ☐ |
 | 0.5 | Confirm anonymisation rules for player safety / external data sales | Legal | ☐ |
-| 0.6 | Confirm Harambe Pay partnership terms (Force42 + GRA revenue share) | Business | ☐ |
+| 0.6 | Confirm payment gateway partnership / revenue share (gateway project + GRA) | Business | ☐ |
 | 0.7 | Document pilot operator for real-time demo | Dev | ☐ |
 
 ---
@@ -1149,51 +1164,49 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 ---
 
-### Phase 7 — Payment gateway & real-time tax (Harambe Pay) (6–8 weeks)
+### Phase 7 — Payment gateway oversight + separate gateway project (6–8 weeks)
 
-**Goal:** Government payment visibility, AML/KYC, tax earmarking, EOD withdrawal.
+**Goal:** Government payment visibility (this repo), AML/KYC, tax earmarking records, EOD withdrawal tracking. **Payment processing** lives in a **separate NestJS repository** — see `docs/PAYMENT_GATEWAY_PROJECT.md`.
 
-**Note:** Force42 builds Harambe Pay product; GRA dashboard consumes gateway APIs.
-
-#### 7A — Gateway integration (Force42)
+#### 7A — Payment gateway application (**separate repository — not kenji-government**)
 
 | # | Task | Done |
 |---|------|------|
-| 7.1 | Harambe Pay API contract (pay, split, escrow, withdraw) | ☐ |
-| 7.2 | Partnership revenue share configuration | ☐ |
-| 7.3 | Operator dashboard routes all ticket payments through Harambe Pay | ☐ |
-| 7.4 | Split payment: operator share + tax share at transaction time | ☐ |
-| 7.5 | Webhook: payment completed → GRA ingest | ☐ |
+| 7.1 | Gateway API contract (pay, split, escrow, withdraw) | ☐ separate repo |
+| 7.2 | Partnership / revenue share configuration | ☐ business |
+| 7.3 | Operator sites route ticket payments through gateway service | ☐ separate repo |
+| 7.4 | Split payment: operator share + tax share at transaction time | ☐ separate repo |
+| 7.5 | Gateway notifies GRA on payment completed | ☑ GRA ingest `POST /gateway/notify`; gateway project must call it |
 
-#### 7B — GRA database & API
-
-| # | Task | Done |
-|---|------|------|
-| 7.6 | Tables: `payment_transactions`, `tax_escrow_entries`, `tax_withdrawal_batches`, `aml_alerts` | ☐ |
-| 7.7 | Ingest handler for gateway webhooks | ☐ |
-| 7.8 | Tax rate config in settings (default 30%) | ☐ |
-| 7.9 | EOD withdrawal job (23:59 EAT) — batch earmarked tax | ☐ |
-| 7.10 | Manual withdrawal trigger (supervisor) with audit log | ☐ |
-
-#### 7C — Payment gateway UI
+#### 7B — GRA database & API (**kenji-government**)
 
 | # | Task | Done |
 |---|------|------|
-| 7.11 | `/payments` overview: volume, success rate, tax today | ☐ |
-| 7.12 | `/payments/transactions` searchable log | ☐ |
-| 7.13 | `/payments/tax-escrow` balance + withdrawal history | ☐ |
-| 7.14 | `/payments/aml` alert queue + review actions | ☐ |
-| 7.15 | `/payments/operators` per-operator stats | ☐ |
-| 7.16 | Real-time transaction counter on main dashboard | ☐ |
+| 7.6 | Tables: `payment_transactions`, `tax_escrow_entries`, `tax_withdrawal_batches`, `aml_alerts` | ☑ |
+| 7.7 | Ingest handler for gateway webhooks | ☑ |
+| 7.8 | Tax rate config in settings (default 30%) | ☑ (super admin only) |
+| 7.9 | EOD withdrawal job (23:59 EAT) — batch earmarked tax | ☑ |
+| 7.10 | Manual withdrawal trigger (supervisor) with audit log | ☑ |
 
-#### 7D — AML / KYC / CBK
+#### 7C — Payment oversight UI (**kenji-government**)
 
 | # | Task | Done |
 |---|------|------|
-| 7.17 | AML rules engine (velocity, thresholds) — v1 | ☐ |
-| 7.18 | KYC status display per transaction | ☐ |
-| 7.19 | CBK-oriented export report | ☐ |
-| 7.20 | Link high-severity AML alert → enforcement case | ☐ |
+| 7.11 | `/payments` overview: volume, success rate, tax today | ☑ |
+| 7.12 | `/payments/transactions` searchable log | ☑ |
+| 7.13 | `/payments/tax-escrow` balance + withdrawal history | ☑ |
+| 7.14 | `/payments/aml` alert queue + review actions | ☑ |
+| 7.15 | `/payments/operators` per-operator stats | ☑ |
+| 7.16 | Real-time transaction counter on main dashboard | ☑ |
+
+#### 7D — AML / KYC / CBK (**kenji-government**)
+
+| # | Task | Done |
+|---|------|------|
+| 7.17 | AML rules engine (velocity, thresholds) — v1 | ☑ |
+| 7.18 | KYC status display per transaction | ☑ |
+| 7.19 | CBK-oriented export report | ☑ (`cbk_aml_payment_export` in Reports) |
+| 7.20 | Link high-severity AML alert → enforcement case | ☑ |
 
 **Phase 7 exit criteria:** 100 KSH payment → 30 KSH earmarked visible in UI; EOD withdrawal recorded; AML alert reviewable.
 
@@ -1203,8 +1216,8 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 | # | Task | Done |
 |---|------|------|
-| 8.1 | MFA for staff (TOTP) | ☐ |
-| 8.2 | Session timeout + idle logout | ☐ |
+| 8.1 | MFA for staff (TOTP) | ☑ |
+| 8.2 | Session timeout + idle logout | ☑ |
 | 8.3 | Postgres daily backup + restore test | ☐ |
 | 8.4 | MinIO/S3 backup for documents and reports | ☐ |
 | 8.5 | Centralised logging (e.g. Loki or cloud) | ☐ |
@@ -1249,7 +1262,7 @@ Phase 5 (reports) ← can start after Phase 2 │
     ↓                                       │
 Phase 6 (regional / player safety) ← needs Phase 3/4 events
     ↓
-Phase 7 (Harambe Pay) ← needs Phase 4 payment events
+Phase 7 (gateway project + GRA oversight) ← needs Phase 4 payment events
     ↓
 Phase 8 (hardening)
     ↓
@@ -1309,7 +1322,7 @@ Phase 9 (pilot & scale)
 - Similar operator model: `/var/www/compgo` (raffle/competition platform)
 - Operator integration kit: `integrations/operator/` (pilot VPS path: `/var/www/byanydream`)
 - VPS static site: `https://compliance.srv1781529.hstgr.cloud`
-- Payment product: Harambe Pay (Force42 partnership)
+- Payment gateway (separate project): `docs/PAYMENT_GATEWAY_PROJECT.md`
 - **Operator raffle platform (build after):** `/var/www/Kenji-raffle/docs/PROJECT_PLAN_2.md`
 - SSH details: `ssh.txt`
 - README: project purpose and stakeholder next steps

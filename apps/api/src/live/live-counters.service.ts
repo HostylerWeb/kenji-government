@@ -55,6 +55,19 @@ export class LiveCountersService {
       .exec();
   }
 
+  async recordTaxEarmarked(amount: number) {
+    const date = this.todayKey();
+    const client = this.redis.getClient();
+    const amountCents = Math.round(amount * 100);
+    await client.incrby(`${COUNTERS_PREFIX}:global:tax:${date}`, amountCents);
+  }
+
+  async recordGatewayPayment() {
+    const date = this.todayKey();
+    const client = this.redis.getClient();
+    await client.incr(`${COUNTERS_PREFIX}:global:gateway_payments:${date}`);
+  }
+
   async getCounters(operatorExternalId?: string) {
     const date = this.todayKey();
     const client = this.redis.getClient();
@@ -66,14 +79,23 @@ export class LiveCountersService {
       ? this.operatorRevenueKey(operatorExternalId, date)
       : this.globalRevenueKey(date);
 
-    const [ticketsRaw, revenueCentsRaw] = await client.mget(ticketsKey, revenueKey);
+    const [ticketsRaw, revenueCentsRaw, taxCentsRaw, paymentsRaw] = await client.mget(
+      ticketsKey,
+      revenueKey,
+      `${COUNTERS_PREFIX}:global:tax:${date}`,
+      `${COUNTERS_PREFIX}:global:gateway_payments:${date}`,
+    );
     const tickets = Math.max(0, Number(ticketsRaw ?? 0));
     const revenueCents = Math.max(0, Number(revenueCentsRaw ?? 0));
+    const taxCents = Math.max(0, Number(taxCentsRaw ?? 0));
+    const gatewayPayments = Math.max(0, Number(paymentsRaw ?? 0));
 
     return {
       date,
       tickets_today: tickets,
       revenue_today: (revenueCents / 100).toFixed(2),
+      tax_earmarked_today: (taxCents / 100).toFixed(2),
+      gateway_payments_today: gatewayPayments,
       scope: operatorExternalId ? "operator" : "global",
       operator_external_id: operatorExternalId ?? null,
     };

@@ -23,26 +23,14 @@ export async function generateReportData(
     case REPORT_SLUGS.PLAYER_SAFETY_AGGREGATES:
       return generatePlayerSafetyRegionalSummary(prisma);
     case REPORT_SLUGS.PAYMENT_GATEWAY_DAILY_VOLUME:
-      return stubReport(
-        "Payment Gateway Daily Volume",
-        "Data available after Phase 7 Harambe Pay integration",
-      );
+      return generatePaymentGatewayDailyVolume(prisma, parameters);
     case REPORT_SLUGS.AML_ALERT_SUMMARY:
-      return stubReport(
-        "AML Alert Summary",
-        "Data available after Phase 7 AML module",
-      );
+      return generateAmlAlertSummary(prisma);
+    case REPORT_SLUGS.CBK_AML_PAYMENT_EXPORT:
+      return generateCbkAmlPaymentExport(prisma, parameters);
     default:
       throw new Error(`Unknown report slug: ${slug}`);
   }
-}
-
-function stubReport(title: string, note: string) {
-  return {
-    title,
-    headers: ["Note"],
-    rows: [{ Note: note }],
-  };
 }
 
 async function generateGgrByOperatorMonthly(
@@ -264,6 +252,128 @@ async function generateLicenceExpiry(prisma: PrismaClient) {
       "Trading Name": lic.operator.trading_name,
       "Licence Number": lic.licence_number,
       "Expires At": lic.expires_at.toISOString().slice(0, 10),
+    })),
+  };
+}
+
+async function generatePaymentGatewayDailyVolume(
+  prisma: PrismaClient,
+  parameters: Record<string, unknown>,
+) {
+  const date =
+    typeof parameters.date === "string"
+      ? parameters.date
+      : new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
+
+  const start = new Date(`${date}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  const payments = await prisma.payment_transactions.findMany({
+    where: {
+      status: "completed",
+      completed_at: { gte: start, lt: end },
+    },
+    include: {
+      operator: { select: { external_id: true, trading_name: true } },
+    },
+    orderBy: { completed_at: "asc" },
+  });
+
+  return {
+    title: `Payment Gateway Daily Volume — ${date}`,
+    headers: [
+      "Transaction ID",
+      "Operator",
+      "Gross (KES)",
+      "Tax (KES)",
+      "KYC",
+      "Completed At",
+    ],
+    rows: payments.map((p) => ({
+      "Transaction ID": p.external_transaction_id,
+      Operator: p.operator.trading_name,
+      "Gross (KES)": Number(p.gross_amount).toLocaleString("en-KE"),
+      "Tax (KES)": Number(p.tax_amount).toLocaleString("en-KE"),
+      KYC: p.kyc_status,
+      "Completed At": p.completed_at?.toISOString() ?? "",
+    })),
+  };
+}
+
+async function generateAmlAlertSummary(prisma: PrismaClient) {
+  const alerts = await prisma.aml_alerts.findMany({
+    include: {
+      operator: { select: { external_id: true, trading_name: true } },
+    },
+    orderBy: { created_at: "desc" },
+    take: 500,
+  });
+
+  return {
+    title: "AML Alert Summary",
+    headers: [
+      "Operator",
+      "Type",
+      "Severity",
+      "Status",
+      "Created At",
+    ],
+    rows: alerts.map((a) => ({
+      Operator: a.operator.trading_name,
+      Type: a.alert_type,
+      Severity: a.severity,
+      Status: a.status,
+      "Created At": a.created_at.toISOString(),
+    })),
+  };
+}
+
+async function generateCbkAmlPaymentExport(
+  prisma: PrismaClient,
+  parameters: Record<string, unknown>,
+) {
+  const days = Number(parameters.days ?? 30);
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - days);
+  since.setUTCHours(0, 0, 0, 0);
+
+  const payments = await prisma.payment_transactions.findMany({
+    where: { created_at: { gte: since } },
+    include: {
+      operator: { select: { external_id: true, trading_name: true } },
+      aml_alerts: {
+        select: { alert_type: true, severity: true, status: true },
+      },
+    },
+    orderBy: { created_at: "asc" },
+  });
+
+  return {
+    title: `CBK AML Payment Export (last ${days} days)`,
+    headers: [
+      "Date",
+      "Operator ID",
+      "Operator",
+      "Transaction Ref",
+      "Gross (KES)",
+      "Tax (KES)",
+      "KYC Status",
+      "AML Risk Score",
+      "AML Alert Count",
+      "Status",
+    ],
+    rows: payments.map((p) => ({
+      Date: p.created_at.toISOString().slice(0, 10),
+      "Operator ID": p.operator.external_id,
+      Operator: p.operator.trading_name,
+      "Transaction Ref": p.external_transaction_id,
+      "Gross (KES)": Number(p.gross_amount).toLocaleString("en-KE"),
+      "Tax (KES)": Number(p.tax_amount).toLocaleString("en-KE"),
+      "KYC Status": p.kyc_status,
+      "AML Risk Score": p.aml_risk_score,
+      "AML Alert Count": p.aml_alerts.length,
+      Status: p.status,
     })),
   };
 }

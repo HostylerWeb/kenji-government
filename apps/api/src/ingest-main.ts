@@ -35,7 +35,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle("GRA Operator Ingest API")
-    .setDescription("Operator data ingest for GRA oversight portal")
+    .setDescription(
+      "Operator data ingest and sandbox mock payment gateway (Harambe Pay stand-in)",
+    )
     .setVersion("1.0.0")
     .addApiKey({ type: "apiKey", name: "X-Api-Key", in: "header" }, "api-key")
     .build();

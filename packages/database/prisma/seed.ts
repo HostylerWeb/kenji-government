@@ -1,5 +1,5 @@
 import { PrismaClient, user_role, report_category } from "@prisma/client";
-import { REPORT_SLUGS } from "@kenji-government/shared";
+import { REPORT_SLUGS, SYSTEM_SETTING_KEYS, GOVERNMENT_TAX_RATE_DEFAULT } from "@kenji-government/shared";
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import { config as loadEnv } from "dotenv";
@@ -18,6 +18,12 @@ const prisma = new PrismaClient();
 const STAFF_USERS = [
   {
     email: "admin@gra.go.ke",
+    full_name: "GRA Super Administrator",
+    role: user_role.super_admin,
+    password: "GraAdmin123!",
+  },
+  {
+    email: "gra.admin@gra.go.ke",
     full_name: "GRA Administrator",
     role: user_role.admin,
     password: "GraAdmin123!",
@@ -699,6 +705,28 @@ async function main() {
       is_scheduled: false,
     },
     {
+      slug: REPORT_SLUGS.CBK_AML_PAYMENT_EXPORT,
+      title: "CBK AML Payment Export",
+      description:
+        "CBK-oriented export of gateway payments with KYC and AML risk fields.",
+      category: report_category.payment,
+      required_role: user_role.supervisor,
+      parameters_schema: {
+        fields: [
+          {
+            name: "days",
+            type: "number",
+            label: "Days back",
+            default: 30,
+            min: 7,
+            max: 365,
+          },
+        ],
+        defaults: { days: 30 },
+      },
+      is_scheduled: false,
+    },
+    {
       slug: REPORT_SLUGS.OPERATOR_LICENCE_EXPIRY,
       title: "Operator Licence Expiry",
       description: "Licences expiring within the next 90 days.",
@@ -877,6 +905,119 @@ async function main() {
       }
     }
     await aggregatePlayerSafetyRange(prisma, 14);
+  }
+
+  console.log("Seeding system settings...");
+  const superAdmin = await prisma.users.findUnique({
+    where: { email: "admin@gra.go.ke" },
+  });
+
+  await prisma.system_settings.upsert({
+    where: { key: SYSTEM_SETTING_KEYS.TAX_RATE },
+    update: { value: { rate: GOVERNMENT_TAX_RATE_DEFAULT } },
+    create: {
+      key: SYSTEM_SETTING_KEYS.TAX_RATE,
+      value: { rate: GOVERNMENT_TAX_RATE_DEFAULT },
+      updated_by: superAdmin?.id,
+    },
+  });
+
+  await prisma.system_settings.upsert({
+    where: { key: SYSTEM_SETTING_KEYS.TREASURY_ACCOUNT_REF },
+    update: { value: { account_ref: "KE-TREASURY-GRA-001" } },
+    create: {
+      key: SYSTEM_SETTING_KEYS.TREASURY_ACCOUNT_REF,
+      value: { account_ref: "KE-TREASURY-GRA-001" },
+      updated_by: superAdmin?.id,
+    },
+  });
+
+  await prisma.system_settings.upsert({
+    where: { key: SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS },
+    update: {
+      value: { emails: ["supervisor@gra.go.ke", "analyst@gra.go.ke"] },
+    },
+    create: {
+      key: SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS,
+      value: { emails: ["supervisor@gra.go.ke", "analyst@gra.go.ke"] },
+      updated_by: superAdmin?.id,
+    },
+  });
+
+  const demoSite = await prisma.operator_sites.findFirst({
+    where: {
+      is_primary: true,
+      operator: { external_id: "op-001" },
+    },
+  });
+
+  if (demoSite) {
+    console.log("Seeding sample gateway payment (100 KSH / 30 KSH tax)...");
+    const externalId = "hpay-seed-demo-100";
+    const existingPayment = await prisma.payment_transactions.findUnique({
+      where: { external_transaction_id: externalId },
+    });
+
+    if (!existingPayment) {
+      const op = await prisma.operators.findFirst({
+        where: { external_id: "op-001" },
+      });
+      if (op) {
+        const payment = await prisma.payment_transactions.create({
+          data: {
+            external_transaction_id: externalId,
+            operator_id: op.id,
+            operator_site_id: demoSite.id,
+            ticket_reference: "TKT-SEED-100",
+            gross_amount: 100,
+            operator_amount: 70,
+            tax_amount: 30,
+            tax_rate: GOVERNMENT_TAX_RATE_DEFAULT,
+            currency: "KES",
+            status: "completed",
+            kyc_status: "verified",
+            aml_risk_score: 0,
+            payer_fingerprint: "fp_seed_demo",
+            county: op.county,
+            completed_at: new Date(),
+          },
+        });
+
+        await prisma.tax_escrow_entries.create({
+          data: {
+            payment_transaction_id: payment.id,
+            tax_amount: 30,
+            status: "earmarked",
+          },
+        });
+      }
+    }
+
+    const payment =
+      existingPayment ??
+      (await prisma.payment_transactions.findUnique({
+        where: { external_transaction_id: externalId },
+      }));
+    const op = await prisma.operators.findFirst({
+      where: { external_id: "op-001" },
+    });
+    if (payment && op) {
+      const existingAlert = await prisma.aml_alerts.findFirst({
+        where: { payment_transaction_id: payment.id, status: "open" },
+      });
+      if (!existingAlert) {
+        await prisma.aml_alerts.create({
+          data: {
+            payment_transaction_id: payment.id,
+            operator_id: op.id,
+            alert_type: "structuring",
+            severity: "medium",
+            details: { reason: "Seed demo AML alert for review workflow" },
+            status: "open",
+          },
+        });
+      }
+    }
   }
 
   console.log("Seed complete.");

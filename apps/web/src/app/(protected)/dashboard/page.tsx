@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, CheckCircle2, AlertTriangle, XCircle, Ticket } from "lucide-react";
+import { Building2, CheckCircle2, AlertTriangle, XCircle, Ticket, CreditCard } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardHeader } from "@/components/card";
 import { LiveActivityTicker } from "@/components/live-activity-ticker";
@@ -114,6 +114,23 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Revenue Today" description={formatKsh(liveCounters?.revenue_today)} />
           <p className="text-sm text-muted">Real-time ticket sales (EAT)</p>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Gateway Payments Today"
+            description={formatNumber(liveCounters?.gateway_payments_today)}
+          />
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <CreditCard className="h-4 w-4" />
+            Harambe Pay (EAT)
+          </div>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Tax Earmarked Today"
+            description={formatKsh(liveCounters?.tax_earmarked_today)}
+          />
+          <p className="text-sm text-muted">Government share (EAT)</p>
         </Card>
       </div>
 

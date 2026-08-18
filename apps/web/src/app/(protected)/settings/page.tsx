@@ -12,14 +12,32 @@ import {
   getOperatorSites,
   generateApiCredential,
   revokeApiCredential,
+  getSystemSettings,
+  updateSystemSettings,
+  disableMfa,
+  getSecurityPreferences,
+  updateSecurityPreferences,
   type StaffUser,
+  type SystemSettings,
+  type SecurityPreferences,
 } from "@/lib/api";
+import { MfaSetupForm } from "@/components/mfa-setup-form";
+import { storeAuth } from "@/lib/auth";
 
-const ROLES = ["admin", "supervisor", "analyst", "auditor"] as const;
+const ALL_ROLES = [
+  "super_admin",
+  "admin",
+  "supervisor",
+  "analyst",
+  "auditor",
+] as const;
+
+const ADMIN_ASSIGNABLE = ["supervisor", "analyst", "auditor"] as const;
 
 export default function SettingsPage() {
   const { user, token } = useAuth();
   const [users, setUsers] = useState<StaffUser[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [operatorId, setOperatorId] = useState("");
   const [sites, setSites] = useState<
     Array<{
@@ -30,12 +48,25 @@ export default function SettingsPage() {
   >([]);
   const [credentials, setCredentials] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [showMfaSetup, setShowMfaSetup] = useState(false);
+  const [securityPrefs, setSecurityPrefs] = useState<SecurityPreferences | null>(
+    null,
+  );
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin =
+    user?.role === "admin" || user?.role === "super_admin";
+  const isSuperAdmin = user?.role === "super_admin";
+  const assignableRoles = isSuperAdmin ? ALL_ROLES : ADMIN_ASSIGNABLE;
+
+  useEffect(() => {
+    if (!token) return;
+    getSecurityPreferences(token).then(setSecurityPrefs).catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     if (!token || !isAdmin) return;
     getUsers(token).then(setUsers).catch(() => {});
+    getSystemSettings(token).then(setSystemSettings).catch(() => {});
   }, [token, isAdmin]);
 
   useEffect(() => {
@@ -75,6 +106,37 @@ export default function SettingsPage() {
     setMessage("Role updated.");
   }
 
+  async function handleSystemSettings(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !isSuperAdmin) return;
+    const form = new FormData(e.currentTarget);
+    const emails = String(form.get("report_emails") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    try {
+      const updated = await updateSystemSettings(token, {
+        tax_rate: { rate: Number(form.get("tax_rate")) / 100 },
+        smtp: {
+          host: String(form.get("smtp_host") || "") || undefined,
+          port: Number(form.get("smtp_port") || 587),
+          user: String(form.get("smtp_user") || "") || undefined,
+          pass: String(form.get("smtp_pass") || "") || undefined,
+          from: String(form.get("smtp_from") || "") || undefined,
+        },
+        report_stakeholder_emails: { emails },
+        treasury_account_ref: {
+          account_ref: String(form.get("treasury_ref")),
+        },
+      });
+      setSystemSettings(updated);
+      setMessage("System settings updated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to update settings");
+    }
+  }
+
   async function handleGenerateCredential(siteId: string) {
     if (!token) return;
     try {
@@ -106,6 +168,93 @@ export default function SettingsPage() {
       {message && (
         <p className="mb-4 rounded-lg bg-secondary px-4 py-3 text-sm">{message}</p>
       )}
+
+      <Card className="mb-6">
+        <h2 className="mb-2 text-base font-semibold">Sign-in security</h2>
+        <p className="mb-4 text-sm text-muted">
+          Optional layers you can turn on for your account.
+        </p>
+
+        {securityPrefs && (
+          <div className="space-y-4">
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={securityPrefs.google_authenticator_enabled}
+                onChange={async (e) => {
+                  if (!token) return;
+                  if (e.target.checked) {
+                    setShowMfaSetup(true);
+                    return;
+                  }
+                  try {
+                    await updateSecurityPreferences(token, {
+                      google_authenticator_enabled: false,
+                    });
+                    await disableMfa(token);
+                    const prefs = await getSecurityPreferences(token);
+                    setSecurityPrefs(prefs);
+                    setMessage("Google Authenticator disabled.");
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : "Failed");
+                  }
+                }}
+                className="mt-1"
+              />
+              <span>
+                <strong>Google Authenticator (2FA)</strong>
+                <br />
+                <span className="text-muted">
+                  Use an authenticator app for a 6-digit code at sign-in.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={securityPrefs.email_otp_new_device_enabled}
+                onChange={async (e) => {
+                  if (!token) return;
+                  try {
+                    const prefs = await updateSecurityPreferences(token, {
+                      email_otp_new_device_enabled: e.target.checked,
+                    });
+                    setSecurityPrefs(prefs);
+                    setMessage("Email verification preference updated.");
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : "Failed");
+                  }
+                }}
+                className="mt-1"
+              />
+              <span>
+                <strong>Email code on new devices</strong>
+                <br />
+                <span className="text-muted">
+                  When we detect an unfamiliar device fingerprint, send a one-time
+                  code to your email before sign-in completes.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
+        {showMfaSetup && (
+          <div className="mt-4 border-t border-border pt-4">
+            <MfaSetupForm
+              onComplete={(response) => {
+                storeAuth(response);
+                setShowMfaSetup(false);
+                getSecurityPreferences(token!).then(setSecurityPrefs);
+                setMessage("Google Authenticator enabled.");
+              }}
+              onError={(err) => setMessage(err)}
+            />
+          </div>
+        )}
+      </Card>
+
       {credentials && (
         <Card className="mb-6">
           <h2 className="mb-2 font-semibold">New API Credentials</h2>
@@ -116,6 +265,110 @@ export default function SettingsPage() {
 
       {isAdmin ? (
         <>
+          {systemSettings && (
+            <Card className="mb-6">
+              <h2 className="mb-2 text-base font-semibold">System configuration</h2>
+              {isSuperAdmin ? (
+                <p className="mb-4 text-xs text-muted">
+                  Super administrator only — tax rate, SMTP, treasury account, report recipients.
+                </p>
+              ) : (
+                <p className="mb-4 text-xs text-muted">
+                  Read-only. Contact a super administrator to change tax rate or SMTP settings.
+                </p>
+              )}
+              <form onSubmit={handleSystemSettings} className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  Government tax rate (%)
+                  <input
+                    name="tax_rate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    disabled={!isSuperAdmin}
+                    defaultValue={Math.round(systemSettings.tax_rate * 1000) / 10}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm">
+                  Treasury account ref
+                  <input
+                    name="treasury_ref"
+                    disabled={!isSuperAdmin}
+                    defaultValue={systemSettings.treasury_account_ref ?? ""}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  Report stakeholder emails (comma-separated)
+                  <input
+                    name="report_emails"
+                    disabled={!isSuperAdmin}
+                    defaultValue={systemSettings.report_stakeholder_emails.join(", ")}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm">
+                  SMTP host
+                  <input
+                    name="smtp_host"
+                    disabled={!isSuperAdmin}
+                    placeholder={systemSettings.smtp.host ?? "not configured"}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm">
+                  SMTP port
+                  <input
+                    name="smtp_port"
+                    type="number"
+                    disabled={!isSuperAdmin}
+                    placeholder={String(systemSettings.smtp.port ?? 587)}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm">
+                  SMTP user
+                  <input
+                    name="smtp_user"
+                    disabled={!isSuperAdmin}
+                    placeholder={systemSettings.smtp.user ?? ""}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm">
+                  SMTP password
+                  <input
+                    name="smtp_pass"
+                    type="password"
+                    disabled={!isSuperAdmin}
+                    placeholder={systemSettings.smtp.configured ? "leave blank to keep" : ""}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  SMTP from address
+                  <input
+                    name="smtp_from"
+                    type="email"
+                    disabled={!isSuperAdmin}
+                    placeholder={systemSettings.smtp.from ?? "noreply@gra.go.ke"}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                </label>
+                {isSuperAdmin && (
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-4 py-2 text-sm text-white sm:col-span-2"
+                  >
+                    Save system settings
+                  </button>
+                )}
+              </form>
+            </Card>
+          )}
+
           <Card className="mb-6">
             <h2 className="mb-4 text-base font-semibold">Staff Users</h2>
             <table className="min-w-full text-left text-sm">
@@ -138,9 +391,14 @@ export default function SettingsPage() {
                         value={u.role}
                         onChange={(e) => changeRole(u.id, e.target.value)}
                         className="rounded border border-border px-2 py-1 text-xs capitalize"
-                        disabled={u.id === user.id}
+                        disabled={
+                          u.id === user.id ||
+                          (u.role === "super_admin" && !isSuperAdmin)
+                        }
                       >
-                        {ROLES.map((r) => (
+                        {(u.role === "super_admin" || u.role === "admin"
+                          ? ALL_ROLES
+                          : assignableRoles).map((r) => (
                           <option key={r} value={r}>{r}</option>
                         ))}
                       </select>
@@ -150,7 +408,10 @@ export default function SettingsPage() {
                       <button
                         onClick={() => toggleUser(u.id, u.is_active)}
                         className="text-xs text-primary hover:underline"
-                        disabled={u.id === user.id}
+                        disabled={
+                          u.id === user.id ||
+                          (u.role === "super_admin" && !isSuperAdmin)
+                        }
                       >
                         {u.is_active ? "Deactivate" : "Activate"}
                       </button>
@@ -167,8 +428,8 @@ export default function SettingsPage() {
               <input name="full_name" placeholder="Full name" required className="rounded-lg border border-border px-3 py-2 text-sm" />
               <input name="email" type="email" placeholder="Email" required className="rounded-lg border border-border px-3 py-2 text-sm" />
               <input name="password" type="password" placeholder="Password" required className="rounded-lg border border-border px-3 py-2 text-sm" />
-              <select name="role" className="rounded-lg border border-border px-3 py-2 text-sm">
-                {ROLES.map((r) => (
+              <select name="role" className="rounded-lg border border-border px-3 py-2 text-sm capitalize">
+                {assignableRoles.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>

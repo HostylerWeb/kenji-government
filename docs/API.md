@@ -238,6 +238,17 @@ Duplicate `X-Idempotency-Key` returns the original ingest event response without
 
 See `docs/OPERATOR_INTEGRATION.md` for full onboarding guide.
 
+## Gateway integration (ingest — receiver only)
+
+The government platform does **not** process card charges. The **payment gateway** (separate project) notifies GRA after each attempt.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/gateway/health` | Connectivity check for gateway service |
+| `POST` | `/gateway/notify` | Completed or failed payment notification |
+
+Dev simulator: `tools/gateway-simulator/simulate-charge.sh`. See `docs/PAYMENT_GATEWAY_PROJECT.md`.
+
 ## OpenAPI
 
 Swagger UI: `http://localhost:4001/docs`

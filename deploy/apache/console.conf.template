@@ -1,0 +1,22 @@
+# Apache reverse proxy for GRA console (VPS uses Apache + Let's Encrypt)
+<VirtualHost *:443>
+    ServerName compliance.srv1781529.hstgr.cloud
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/compliance.srv1781529.hstgr.cloud/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/compliance.srv1781529.hstgr.cloud/privkey.pem
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+
+    # Staff API
+    ProxyPass /api/ http://127.0.0.1:4000/
+    ProxyPassReverse /api/ http://127.0.0.1:4000/
+
+    # Next.js web app
+    ProxyPass / http://127.0.0.1:3000/
+    ProxyPassReverse / http://127.0.0.1:3000/
+
+    ErrorLog ${APACHE_LOG_DIR}/gra-console-error.log
+    CustomLog ${APACHE_LOG_DIR}/gra-console-access.log combined
+</VirtualHost>

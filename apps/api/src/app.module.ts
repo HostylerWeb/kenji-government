@@ -15,6 +15,8 @@ import { UsersModule } from "./users/users.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { LiveApiModule } from "./live/live-api.module";
 import { ReportsModule } from "./reports/reports.module";
+import { SettingsModule } from "./settings/settings.module";
+import { PaymentsModule } from "./payments/payments.module";
 import { RegionalModule } from "./regional/regional.module";
 import { AuditInterceptor } from "./audit/audit.interceptor";
 
@@ -36,6 +38,8 @@ import { AuditInterceptor } from "./audit/audit.interceptor";
     LiveApiModule,
     ReportsModule,
     RegionalModule,
+    SettingsModule,
+    PaymentsModule,
   ],
   providers: [
     {

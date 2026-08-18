@@ -8,6 +8,14 @@ import {
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
+const USER_ROLES = [
+  "super_admin",
+  "admin",
+  "supervisor",
+  "analyst",
+  "auditor",
+] as const;
+
 export class CreateUserDto {
   @ApiProperty()
   @IsEmail()
@@ -23,9 +31,9 @@ export class CreateUserDto {
   @MinLength(1)
   full_name!: string;
 
-  @ApiProperty({ enum: ["admin", "supervisor", "analyst", "auditor"] })
-  @IsEnum(["admin", "supervisor", "analyst", "auditor"])
-  role!: "admin" | "supervisor" | "analyst" | "auditor";
+  @ApiProperty({ enum: USER_ROLES })
+  @IsEnum(USER_ROLES)
+  role!: typeof USER_ROLES[number];
 }
 
 export class UpdateUserDto {
@@ -34,10 +42,10 @@ export class UpdateUserDto {
   @IsString()
   full_name?: string;
 
-  @ApiPropertyOptional({ enum: ["admin", "supervisor", "analyst", "auditor"] })
+  @ApiPropertyOptional({ enum: USER_ROLES })
   @IsOptional()
-  @IsEnum(["admin", "supervisor", "analyst", "auditor"])
-  role?: "admin" | "supervisor" | "analyst" | "auditor";
+  @IsEnum(USER_ROLES)
+  role?: typeof USER_ROLES[number];
 
   @ApiPropertyOptional()
   @IsOptional()

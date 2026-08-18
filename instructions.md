@@ -25,6 +25,30 @@ Project path: `/var/www/kenji-government`
 
 Ports **5436** and **6382** are used instead of defaults **5432** and **6379** to avoid conflicts with other projects on the same machine.
 
+### Payment architecture (important)
+
+This repo is **GRA oversight only** — it does **not** process card payments.
+
+| Platform | Role |
+|----------|------|
+| Raffle operator sites | Charge customers via the **payment gateway** |
+| Payment gateway (**separate NestJS project**) | `/charge`, tax split, escrow — then notifies GRA |
+| **kenji-government** (this repo) | Receives gateway notifications; staff monitor in `/payments` |
+
+```
+Raffle sites  →  Payment gateway  →  GRA ingest  →  GRA staff console
+```
+
+- **GRA ingest endpoint (gateway → GRA):** `POST http://localhost:4001/v1/gateway/notify`
+- **Operator raffle events** (tickets, player safety): `POST /v1/events/*` on the same ingest port — different from payment processing
+- **Full spec:** `docs/PAYMENT_GATEWAY_PROJECT.md`
+- **Local test without gateway repo:** `./tools/gateway-simulator/simulate-charge.sh 100 4242424242424242`
+
+### Staff security (Phase 8)
+
+- **MFA (TOTP):** Required for `super_admin`, `admin`, and `supervisor` on first sign-in (QR setup). Optional for analyst/auditor. Enable in **Settings**.
+- **Session:** Access tokens expire after **30 minutes** (`JWT_EXPIRES_IN`). Idle logout after **30 minutes** (`NEXT_PUBLIC_SESSION_IDLE_MS=1800000`).
+
 ---
 
 ## First-time setup

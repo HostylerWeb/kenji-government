@@ -7,6 +7,7 @@ Reference PHP client and patch scripts for **any licensed raffle operator** conn
 | File | Purpose |
 |------|---------|
 | `GraIngestService.php` | Copy to operator app `app/Services/GraIngestService.php` |
+| `HarambePayGatewayClient.php` | Raffle site client — calls **payment gateway** (not GRA) |
 | `patch-operator-payment-controller.sh` | Wire ticket/payment live events (set `OPERATOR_APP_ROOT`) |
 | `cron-hourly-session-aggregate.example.sh` | Example cron to emit hourly session rollups |
 
@@ -20,6 +21,16 @@ GRA_HMAC_SECRET=<per-site-hmac-secret>
 ```
 
 Sandbox credentials are seeded for operator `op-001` — see `instructions.md`.
+
+## Payment gateway (sandbox)
+
+Raffle sites charge via the **payment gateway project**. GRA only receives notifications.
+
+```bash
+./tools/gateway-simulator/simulate-charge.sh 100 4242424242424242
+```
+
+Production: `HarambePayGatewayClient` targets the gateway service URL. See `docs/PAYMENT_GATEWAY_PROJECT.md`.
 
 ## Events
 

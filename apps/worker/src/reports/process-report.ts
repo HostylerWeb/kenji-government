@@ -2,6 +2,10 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import { saveReportFile } from "../storage";
 import { sendReportEmail } from "../email";
 import {
+  loadReportStakeholderEmails,
+  loadSmtpConfig,
+} from "../settings/load-settings";
+import {
   buildCsv,
   buildPdf,
   generateReportData,
@@ -57,18 +61,21 @@ export async function processReportRun(
         ? (run.report_definition.schedule_recipients as string[])
         : [];
 
+      const dbRecipients = await loadReportStakeholderEmails(prisma);
       const envRecipients = process.env.REPORT_STAKEHOLDER_EMAILS
         ? process.env.REPORT_STAKEHOLDER_EMAILS.split(",").map((e) => e.trim())
         : [];
 
-      const to = [...new Set([...recipients, ...envRecipients])].filter(Boolean);
+      const to = [...new Set([...recipients, ...dbRecipients, ...envRecipients])].filter(Boolean);
       if (to.length > 0) {
+        const smtp = await loadSmtpConfig(prisma);
         await sendReportEmail({
           to,
           subject: `GRA Report: ${run.report_definition.title}`,
           text: `Scheduled report "${run.report_definition.title}" is attached.`,
           attachmentName: `${run.report_definition.slug}.${extension}`,
           attachmentBuffer: buffer,
+          smtp,
         });
       }
     }

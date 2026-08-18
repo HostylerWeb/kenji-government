@@ -42,6 +42,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       full_name: user.full_name,
       role: user.role,
+      mfa_enabled: user.mfa_enabled,
+      email_otp_new_device_enabled: user.email_otp_new_device_enabled,
     };
   }
 }

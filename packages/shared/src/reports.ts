@@ -11,6 +11,7 @@ export const REPORT_SLUGS = {
   PLAYER_SAFETY_AGGREGATES: "player_safety_aggregates",
   PAYMENT_GATEWAY_DAILY_VOLUME: "payment_gateway_daily_volume",
   AML_ALERT_SUMMARY: "aml_alert_summary",
+  CBK_AML_PAYMENT_EXPORT: "cbk_aml_payment_export",
   OPERATOR_LICENCE_EXPIRY: "operator_licence_expiry",
 } as const;
 
@@ -31,7 +32,32 @@ export const ROLE_RANK: Record<UserRole, number> = {
   analyst: 2,
   supervisor: 3,
   admin: 4,
+  super_admin: 5,
 };
+
+export function isSuperAdmin(role: UserRole): boolean {
+  return role === "super_admin";
+}
+
+export function isAdminOrAbove(role: UserRole): boolean {
+  return ROLE_RANK[role] >= ROLE_RANK.admin;
+}
+
+/** Roles that regular admins may assign (not admin or super_admin). */
+export const ADMIN_ASSIGNABLE_ROLES: UserRole[] = [
+  "supervisor",
+  "analyst",
+  "auditor",
+];
+
+/** Roles super admins may assign. */
+export const SUPER_ADMIN_ASSIGNABLE_ROLES: UserRole[] = [
+  "super_admin",
+  "admin",
+  "supervisor",
+  "analyst",
+  "auditor",
+];
 
 export function roleMeetsMinimum(
   userRole: UserRole,

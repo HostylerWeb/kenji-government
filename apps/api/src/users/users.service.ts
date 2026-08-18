@@ -2,16 +2,36 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
+import {
+  ADMIN_ASSIGNABLE_ROLES,
+  SUPER_ADMIN_ASSIGNABLE_ROLES,
+  encryptIngestSecret,
+  isSuperAdmin,
+  type AuthUser,
+  type UserRole,
+} from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
-import { encryptIngestSecret } from "@kenji-government/shared";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private assertRoleAssignment(actor: AuthUser, role: UserRole) {
+    const allowed = isSuperAdmin(actor.role)
+      ? SUPER_ADMIN_ASSIGNABLE_ROLES
+      : ADMIN_ASSIGNABLE_ROLES;
+
+    if (!allowed.includes(role)) {
+      throw new ForbiddenException(
+        `Your role cannot assign the ${role} role`,
+      );
+    }
+  }
 
   async list() {
     return this.prisma.client.users.findMany({
@@ -28,7 +48,8 @@ export class UsersService {
     });
   }
 
-  async create(dto: CreateUserDto) {
+  async create(actor: AuthUser, dto: CreateUserDto) {
+    this.assertRoleAssignment(actor, dto.role);
     const existing = await this.prisma.client.users.findUnique({
       where: { email: dto.email },
     });
@@ -56,9 +77,32 @@ export class UsersService {
     });
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(actor: AuthUser, id: string, dto: UpdateUserDto) {
     const user = await this.prisma.client.users.findUnique({ where: { id } });
     if (!user) throw new NotFoundException("User not found");
+
+    if (dto.role) {
+      this.assertRoleAssignment(actor, dto.role);
+      if (
+        isSuperAdmin(user.role) &&
+        !isSuperAdmin(actor.role) &&
+        dto.role !== user.role
+      ) {
+        throw new ForbiddenException(
+          "Only super administrators may change super admin accounts",
+        );
+      }
+    }
+
+    if (
+      dto.is_active === false &&
+      isSuperAdmin(user.role) &&
+      !isSuperAdmin(actor.role)
+    ) {
+      throw new ForbiddenException(
+        "Only super administrators may deactivate super admin accounts",
+      );
+    }
 
     return this.prisma.client.users.update({
       where: { id },

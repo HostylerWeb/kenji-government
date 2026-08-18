@@ -1,17 +1,27 @@
 import nodemailer from "nodemailer";
 
+export type SmtpConfig = {
+  host: string;
+  port: number;
+  user?: string;
+  pass?: string;
+  from?: string;
+};
+
 export async function sendReportEmail(options: {
   to: string[];
   subject: string;
   text: string;
   attachmentName?: string;
   attachmentBuffer?: Buffer;
+  smtp?: SmtpConfig | null;
 }) {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM ?? "noreply@gra.go.ke";
+  const smtp = options.smtp;
+  const host = smtp?.host ?? process.env.SMTP_HOST;
+  const port = smtp?.port ?? Number(process.env.SMTP_PORT ?? 587);
+  const user = smtp?.user ?? process.env.SMTP_USER;
+  const pass = smtp?.pass ?? process.env.SMTP_PASS;
+  const from = smtp?.from ?? process.env.SMTP_FROM ?? "noreply@gra.go.ke";
 
   if (!host) {
     console.log(

@@ -8,10 +8,12 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { AuthUser } from "@kenji-government/shared";
 import { UsersService } from "./users.service";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
 import { JwtAuthGuard, RolesGuard } from "../auth/guards/auth.guards";
 import { Roles } from "../auth/decorators/roles.decorator";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("users")
 @ApiBearerAuth()
@@ -28,14 +30,18 @@ export class UsersController {
 
   @Post()
   @Roles("admin")
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateUserDto) {
+    return this.usersService.create(user, dto);
   }
 
   @Patch(":id")
   @Roles("admin")
-  update(@Param("id") id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.usersService.update(user, id, dto);
   }
 }
 

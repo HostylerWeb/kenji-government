@@ -8,6 +8,7 @@ import {
   FileText,
   MapPin,
   Shield,
+  CreditCard,
   Settings,
   LogOut,
   Menu,
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/enforcement", label: "Enforcement", icon: Shield },
   { href: "/audit", label: "Audit Log", icon: ClipboardList },
   { href: "/regional", label: "Regional & Player Safety", icon: MapPin },
+  { href: "/payments", label: "Payments & AML", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -8,10 +8,56 @@ datasource db {
 }
 
 enum user_role {
+  super_admin
   admin
   supervisor
   analyst
   auditor
+}
+
+enum payment_transaction_status {
+  pending
+  completed
+  failed
+  refunded
+}
+
+enum kyc_status {
+  verified
+  pending
+  flagged
+}
+
+enum tax_escrow_status {
+  earmarked
+  withdrawn
+  reversed
+}
+
+enum tax_withdrawal_batch_status {
+  pending
+  completed
+  failed
+}
+
+enum aml_alert_type {
+  velocity
+  structuring
+  kyc_mismatch
+  other
+}
+
+enum aml_alert_severity {
+  low
+  medium
+  high
+}
+
+enum aml_alert_status {
+  open
+  reviewed
+  escalated
+  closed
 }
 
 enum operator_status {
@@ -124,6 +170,9 @@ model users {
   full_name     String
   role          user_role @default(analyst)
   is_active     Boolean   @default(true)
+  mfa_enabled   Boolean   @default(false)
+  mfa_secret    String?
+  email_otp_new_device_enabled Boolean @default(true)
   last_login_at DateTime? @db.Timestamptz(6)
   created_at    DateTime  @default(now()) @db.Timestamptz(6)
   updated_at    DateTime  @updatedAt @db.Timestamptz(6)
@@ -134,6 +183,24 @@ model users {
   enforcement_actions   enforcement_actions[]
   uploaded_documents    documents[]
   report_runs           report_runs[]
+  system_settings       system_settings[]
+  tax_withdrawal_batches tax_withdrawal_batches[]
+  reviewed_aml_alerts   aml_alerts[]
+  trusted_devices       user_trusted_devices[]
+}
+
+model user_trusted_devices {
+  id               String   @id @default(uuid()) @db.Uuid
+  user_id          String   @db.Uuid
+  fingerprint_hash String   @db.VarChar(64)
+  user_agent_label String?  @db.VarChar(256)
+  last_seen_at     DateTime @default(now()) @db.Timestamptz(6)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, fingerprint_hash])
+  @@index([user_id])
 }
 
 model audit_logs {
@@ -183,6 +250,8 @@ model operators {
   documents                 documents[]
   operator_monthly_snapshots operator_monthly_snapshots[]
   live_activity_feed         live_activity_feed[]
+  payment_transactions       payment_transactions[]
+  aml_alerts                 aml_alerts[]
 }
 
 model operator_sites {
@@ -200,6 +269,7 @@ model operator_sites {
   ingest_events             ingest_events[]
   player_safety_events        player_safety_events[]
   session_aggregate_events    session_aggregate_events[]
+  payment_transactions        payment_transactions[]
 
   @@index([operator_id])
 }
@@ -478,4 +548,101 @@ model player_safety_aggregates {
   @@unique([bucket_date, county])
   @@index([county])
   @@index([bucket_date])
+}
+
+model system_settings {
+  key        String   @id
+  value      Json
+  updated_by String?  @db.Uuid
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  updater users? @relation(fields: [updated_by], references: [id], onDelete: SetNull)
+}
+
+model payment_transactions {
+  id                      String                     @id @default(uuid()) @db.Uuid
+  external_transaction_id String                     @unique
+  operator_id             String                     @db.Uuid
+  operator_site_id        String                     @db.Uuid
+  ticket_reference        String?
+  gross_amount            Decimal                    @db.Decimal(18, 2)
+  operator_amount         Decimal                    @db.Decimal(18, 2)
+  tax_amount              Decimal                    @db.Decimal(18, 2)
+  tax_rate                Decimal                    @db.Decimal(5, 4)
+  currency                String                     @default("KES")
+  status                  payment_transaction_status @default(pending)
+  kyc_status              kyc_status                 @default(pending)
+  aml_risk_score          Int                        @default(0)
+  payer_fingerprint       String?
+  county                  String?
+  completed_at            DateTime?                  @db.Timestamptz(6)
+  created_at              DateTime                   @default(now()) @db.Timestamptz(6)
+
+  operator       operators       @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  operator_site  operator_sites  @relation(fields: [operator_site_id], references: [id], onDelete: Cascade)
+  tax_escrow_entries tax_escrow_entries[]
+  aml_alerts     aml_alerts[]
+
+  @@index([operator_id])
+  @@index([operator_site_id])
+  @@index([status])
+  @@index([completed_at])
+  @@index([created_at])
+}
+
+model tax_escrow_entries {
+  id                     String            @id @default(uuid()) @db.Uuid
+  payment_transaction_id String            @db.Uuid
+  tax_amount             Decimal           @db.Decimal(18, 2)
+  status                 tax_escrow_status @default(earmarked)
+  earmarked_at           DateTime          @default(now()) @db.Timestamptz(6)
+  withdrawal_batch_id    String?           @db.Uuid
+  created_at             DateTime          @default(now()) @db.Timestamptz(6)
+
+  payment_transaction payment_transactions    @relation(fields: [payment_transaction_id], references: [id], onDelete: Cascade)
+  withdrawal_batch    tax_withdrawal_batches? @relation(fields: [withdrawal_batch_id], references: [id], onDelete: SetNull)
+
+  @@index([payment_transaction_id])
+  @@index([status])
+  @@index([withdrawal_batch_id])
+}
+
+model tax_withdrawal_batches {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  business_date           DateTime                    @db.Date
+  total_amount            Decimal                     @db.Decimal(18, 2)
+  destination_account_ref String
+  gateway_batch_id        String?
+  status                  tax_withdrawal_batch_status @default(pending)
+  initiated_by            String?                     @db.Uuid
+  completed_at            DateTime?                   @db.Timestamptz(6)
+  created_at              DateTime                    @default(now()) @db.Timestamptz(6)
+
+  initiator users?              @relation(fields: [initiated_by], references: [id], onDelete: SetNull)
+  entries   tax_escrow_entries[]
+
+  @@index([business_date])
+  @@index([status])
+}
+
+model aml_alerts {
+  id                     String             @id @default(uuid()) @db.Uuid
+  payment_transaction_id String?            @db.Uuid
+  operator_id            String             @db.Uuid
+  alert_type             aml_alert_type
+  severity               aml_alert_severity
+  details                Json               @default("{}")
+  status                 aml_alert_status   @default(open)
+  reviewed_by            String?            @db.Uuid
+  created_at             DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime           @updatedAt @db.Timestamptz(6)
+
+  payment_transaction payment_transactions? @relation(fields: [payment_transaction_id], references: [id], onDelete: SetNull)
+  operator            operators             @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  reviewer            users?                @relation(fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([operator_id])
+  @@index([status])
+  @@index([severity])
+  @@index([created_at])
 }

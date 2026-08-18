@@ -7,12 +7,14 @@ import {
   INGEST_DLQ_NAME,
   INGEST_QUEUE_NAME,
   REPORT_QUEUE_NAME,
+  TAX_WITHDRAWAL_QUEUE_JOB,
 } from "@kenji-government/shared";
 import { processMonthlyReturn } from "./processors/monthly-return.processor";
 import { processReportRun, runScheduledReports } from "./reports/process-report";
 import {
   aggregatePlayerSafetyRange,
 } from "./player-safety/aggregate-player-safety";
+import { runEodTaxWithdrawal } from "./payments/tax-withdrawal";
 
 loadEnv({ path: resolve(__dirname, "../../../.env") });
 
@@ -24,7 +26,10 @@ const reportQueue = new Queue(REPORT_QUEUE_NAME, { connection });
 
 async function recordAdminAlert(ingestEventId: string, errorMessage: string) {
   const admin = await prisma.users.findFirst({
-    where: { role: "admin", is_active: true },
+    where: {
+      role: { in: ["super_admin", "admin"] },
+      is_active: true,
+    },
     select: { id: true },
   });
 
@@ -119,6 +124,22 @@ registerPlayerSafetyAggregation().catch((err) => {
   console.error("Failed to register player safety aggregation:", err);
 });
 
+async function registerEodTaxWithdrawal() {
+  await reportQueue.add(
+    TAX_WITHDRAWAL_QUEUE_JOB,
+    {},
+    {
+      repeat: { pattern: "59 20 * * *" },
+      jobId: "tax-withdrawal-eod",
+    },
+  );
+  console.log("Scheduled EOD tax withdrawal at 23:59 EAT (20:59 UTC)");
+}
+
+registerEodTaxWithdrawal().catch((err) => {
+  console.error("Failed to register EOD tax withdrawal:", err);
+});
+
 const reportWorker = new Worker(
   REPORT_QUEUE_NAME,
   async (job) => {
@@ -133,6 +154,10 @@ const reportWorker = new Worker(
       console.log(
         `Player safety aggregation complete: ${JSON.stringify(result)}`,
       );
+    }
+    if (job.name === TAX_WITHDRAWAL_QUEUE_JOB) {
+      const result = await runEodTaxWithdrawal(prisma);
+      console.log(`EOD tax withdrawal: ${JSON.stringify(result)}`);
     }
   },
   { connection, concurrency: 2 },
