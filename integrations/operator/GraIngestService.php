@@ -1,9 +1,11 @@
 <?php
 
 /**
- * GRA regulatory ingest client for ByAnyDream.
+ * GRA regulatory ingest client for licensed operator platforms.
  *
- * Deploy to: /var/www/byanydream/app/Services/GraIngestService.php
+ * Copy into your operator app, e.g. `app/Services/GraIngestService.php`
+ * (CodeIgniter 4). First pilot deployment used `/var/www/byanydream` on the VPS;
+ * any raffle operator using the same ingest contract can use this class.
  *
  * Env (.env):
  *   GRA_INGEST_ENABLED=true
@@ -239,5 +241,79 @@ class GraIngestService
         }
 
         log_message('debug', "[GRA Ingest] {$path} accepted (HTTP {$status}).");
+    }
+
+    /**
+     * Emit Play Safe activation (anonymised — county only, no player IDs).
+     */
+    public function emitPlaySafeActivated(string $county, ?string $region = null): void
+    {
+        if (!$this->isConfigured()) {
+            return;
+        }
+
+        $this->postJson(
+            'events/player-safety',
+            [
+                'event_type' => 'play_safe',
+                'county' => $county,
+                'region' => $region,
+                'occurred_at' => date('c'),
+            ],
+            'gra-play-safe-' . time() . '-' . bin2hex(random_bytes(4)),
+        );
+    }
+
+    /**
+     * Emit self-exclusion request (anonymised).
+     */
+    public function emitSelfExclusion(string $county, ?string $region = null): void
+    {
+        if (!$this->isConfigured()) {
+            return;
+        }
+
+        $this->postJson(
+            'events/player-safety',
+            [
+                'event_type' => 'self_exclusion',
+                'county' => $county,
+                'region' => $region,
+                'occurred_at' => date('c'),
+            ],
+            'gra-self-exclusion-' . time() . '-' . bin2hex(random_bytes(4)),
+        );
+    }
+
+    /**
+     * Emit hourly session aggregate rollup (anonymised stake bands, no player IDs).
+     */
+    public function emitSessionAggregate(
+        string $county,
+        int $sessionCount,
+        int $totalSessionMinutes,
+        array $stakeBandDistribution,
+        ?string $region = null,
+        ?string $bucketStart = null
+    ): void {
+        if (!$this->isConfigured()) {
+            return;
+        }
+
+        $bucket = $bucketStart ?? date('c', strtotime(date('Y-m-d H:00:00')));
+        $bucketKey = preg_replace('/[^0-9]/', '', $bucket);
+
+        $this->postJson(
+            'events/session-aggregate',
+            [
+                'county' => $county,
+                'region' => $region,
+                'bucket_start' => $bucket,
+                'session_count' => $sessionCount,
+                'total_session_minutes' => $totalSessionMinutes,
+                'stake_band_distribution' => $stakeBandDistribution,
+            ],
+            'gra-session-agg-' . $county . '-' . $bucketKey,
+        );
     }
 }

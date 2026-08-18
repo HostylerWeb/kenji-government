@@ -1,6 +1,6 @@
 # Operator integration guide
 
-This guide covers connecting an operator platform (e.g. ByAnyDream) to the GRA oversight portal for **monthly returns** and **document uploads**.
+This guide covers connecting **any licensed operator raffle platform** to the GRA oversight portal for **monthly returns**, **document uploads**, and **real-time events**.
 
 ## Overview
 
@@ -66,22 +66,37 @@ Endpoints (processed immediately, no worker required):
 | `POST /v1/events/ticket` | Ticket purchased or voided |
 | `POST /v1/events/payment` | Payment completed or failed |
 | `POST /v1/events/operator-updated` | Operator site metadata change |
+| `POST /v1/events/player-safety` | Play Safe activation or self-exclusion (anonymised — county only) |
+| `POST /v1/events/session-aggregate` | Hourly session/stake-band rollups (no player IDs) |
 
-Events appear on the GRA **Dashboard** live ticker within seconds via SSE.
+Payloads containing player identifiers (`player_id`, `email`, `phone`, etc.) are **rejected**.
 
-Demo locally:
+## 6. Player safety & regional analytics (Phase 6)
+
+Operators emit anonymised events for policy-grade regional analytics:
+
+| Endpoint | Body highlights |
+|----------|-----------------|
+| `POST /v1/events/player-safety` | `event_type`: `play_safe` or `self_exclusion`, `county`, `occurred_at` |
+| `POST /v1/events/session-aggregate` | `county`, `bucket_start`, `session_count`, `total_session_minutes`, `stake_band_distribution` |
+
+Operator apps: `GraIngestService::emitPlaySafeActivated()`, `emitSelfExclusion()`, `emitSessionAggregate()` (`integrations/operator/`).
+
+Demo:
 
 ```bash
-php examples/byanydream-ticket-event.php
-./scripts/demo-live-feed.sh 5
+php examples/operator-ingest-player-safety.php
+php examples/operator-ingest-session-aggregate.php
 ```
 
-## 6. Health checks
+Nightly worker job rolls raw events into `player_safety_aggregates` (midnight EAT). Staff view: **Regional & Player Safety** in the console.
+
+## 7. Health checks
 
 - `GET /v1/status` — verify credentials
 - `POST /v1/heartbeat` — optional periodic ping
 
-## 7. Error handling
+## 8. Error handling
 
 | Code | Meaning |
 |------|---------|
@@ -92,17 +107,17 @@ php examples/byanydream-ticket-event.php
 
 Retry transient failures with the **same** idempotency key.
 
-## 8. Examples
+## 9. Examples
 
-- PHP: `examples/byanydream-monthly-return.php`
-- PHP: `examples/byanydream-document-upload.php`
-- PHP: `examples/byanydream-ticket-event.php`
-- PHP: `examples/byanydream-payment-event.php`
+- PHP: `examples/operator-ingest-monthly-return.php`
+- PHP: `examples/operator-ingest-document-upload.php`
+- PHP: `examples/operator-ingest-ticket-event.php`
+- PHP: `examples/operator-ingest-payment-event.php`
 - Demo: `scripts/demo-live-feed.sh`
 - Postman: `docs/postman/gra-ingest-api.json`
 
-## 9. ByAnyDream (pilot operator)
+## 10. Pilot operator (first integration)
 
-Map ByAnyDream monthly export fields to the ingest schema. For real-time visibility, call the ticket/payment event endpoints from ByAnyDream after each purchase (see PHP examples for HMAC signing).
+Map the operator’s monthly export fields to the ingest schema. For real-time visibility, call ticket/payment event endpoints after each purchase (see PHP examples for HMAC signing).
 
-Reference codebase: `/var/www/byanydream` on the VPS.
+Integration kit: `integrations/operator/` — copy `GraIngestService.php` into the operator app; use `patch-operator-payment-controller.sh` with `OPERATOR_APP_ROOT` set to the operator PHP root on the server.

@@ -1,8 +1,8 @@
 <?php
 /**
- * Example: emit a real-time payment event to GRA Ingest API (op-001 sandbox).
+ * Example: emit a real-time ticket purchase to GRA Ingest API (op-001 sandbox).
  *
- * Usage: php examples/byanydream-payment-event.php
+ * Usage: php examples/operator-ingest-ticket-event.php
  */
 
 $baseUrl = getenv('GRA_INGEST_URL') ?: 'http://localhost:4001/v1';
@@ -12,20 +12,20 @@ $hmacSecret = getenv('GRA_HMAC_SECRET') ?: 'sandbox_hmac_op001_secret_32chars_mi
 $now = new DateTimeImmutable('now', new DateTimeZone('Africa/Nairobi'));
 
 $payload = [
-    'action' => 'completed',
-    'payment_id' => 'PAY-' . bin2hex(random_bytes(4)),
+    'action' => 'purchased',
+    'ticket_id' => 'TKT-' . bin2hex(random_bytes(4)),
+    'raffle_id' => 'raffle-weekly-001',
+    'raffle_name' => 'Weekly Dream Draw',
     'amount' => 500,
     'currency' => 'KES',
-    'method' => 'mpesa',
-    'reference' => 'QGH' . random_int(100000, 999999),
-    'occurred_at' => $now->format('Y-m-d\TH:i:sP'),
+    'purchased_at' => $now->format('Y-m-d\TH:i:sP'),
 ];
 
 $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
 $signature = hash_hmac('sha256', $body, $hmacSecret);
-$idempotencyKey = 'payment-' . $payload['payment_id'];
+$idempotencyKey = 'ticket-' . $payload['ticket_id'];
 
-$ch = curl_init($baseUrl . '/events/payment');
+$ch = curl_init($baseUrl . '/events/ticket');
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_RETURNTRANSFER => true,

@@ -14,6 +14,7 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 @Injectable()
 export class StorageService implements OnModuleInit {
@@ -78,6 +79,21 @@ export class StorageService implements OnModuleInit {
     await mkdir(dir, { recursive: true });
     await writeFile(fullPath, buffer);
     return relativePath;
+  }
+
+  async getSignedDownloadUrl(
+    relativePath: string,
+    expiresInSeconds = 3600,
+  ): Promise<string | null> {
+    if (!this.useMinio || !this.s3) {
+      return null;
+    }
+
+    return getSignedUrl(
+      this.s3,
+      new GetObjectCommand({ Bucket: this.bucket, Key: relativePath }),
+      { expiresIn: expiresInSeconds },
+    );
   }
 
   async readFile(relativePath: string): Promise<Buffer> {

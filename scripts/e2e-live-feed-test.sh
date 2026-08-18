@@ -13,7 +13,7 @@ echo ""
 
 # 1. Emit ticket via PHP example
 echo "1. Posting ticket event..."
-OUT=$(php "$ROOT/examples/byanydream-ticket-event.php")
+OUT=$(php "$ROOT/examples/operator-ingest-ticket-event.php")
 echo "$OUT"
 if ! echo "$OUT" | grep -q "HTTP 201"; then
   echo "FAIL: ingest did not return 201"

@@ -15,6 +15,7 @@ import { IngestSite } from "./decorators/ingest-site.decorator";
 import type { IngestSiteContext } from "./decorators/ingest-site.decorator";
 import { RateLimitService } from "./rate-limit.service";
 import { RealtimeEventsService } from "./realtime-events.service";
+import { PlayerSafetyEventsService } from "./player-safety-events.service";
 
 @ApiTags("ingest")
 @ApiHeader({ name: "X-Api-Key", required: true })
@@ -26,6 +27,7 @@ export class IngestController {
   constructor(
     private readonly ingest: IngestService,
     private readonly realtime: RealtimeEventsService,
+    private readonly playerSafety: PlayerSafetyEventsService,
     private readonly rateLimit: RateLimitService,
   ) {}
 
@@ -115,6 +117,36 @@ export class IngestController {
     await this.rateLimit.check(site.apiKeyPrefix);
     const idempotencyKey = this.getIdempotencyKey(request);
     return this.realtime.submitOperatorUpdatedEvent(site, body, idempotencyKey);
+  }
+
+  @Post("events/player-safety")
+  async playerSafetyEvent(
+    @IngestSite() site: IngestSiteContext,
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+  ) {
+    await this.rateLimit.check(site.apiKeyPrefix);
+    const idempotencyKey = this.getIdempotencyKey(request);
+    return this.playerSafety.submitPlayerSafetyEvent(
+      site,
+      body,
+      idempotencyKey,
+    );
+  }
+
+  @Post("events/session-aggregate")
+  async sessionAggregateEvent(
+    @IngestSite() site: IngestSiteContext,
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+  ) {
+    await this.rateLimit.check(site.apiKeyPrefix);
+    const idempotencyKey = this.getIdempotencyKey(request);
+    return this.playerSafety.submitSessionAggregate(
+      site,
+      body,
+      idempotencyKey,
+    );
   }
 
   private getIdempotencyKey(request: FastifyRequest): string {

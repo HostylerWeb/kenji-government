@@ -379,15 +379,15 @@ apps/web/
 
 | # | Task | Done |
 |---|------|------|
-| C.1 | Live activity feed component + SSE connection indicator | ☐ |
-| C.2 | Operator “Live activity” tab | ☐ |
-| C.3 | Regional map (Kenya counties) | ☐ |
-| C.4 | Regional tabs: commercial, player safety, behaviour, spend | ☐ |
-| C.5 | Play Safe bar chart by county | ☐ |
-| C.6 | Peak play time heatmap | ☐ |
-| C.7 | Anonymised data disclaimer + export button | ☐ |
-| C.8 | Reports hub card grid | ☐ |
-| C.9 | Report generator modal + download UX | ☐ |
+| C.1 | Live activity feed component + SSE connection indicator | ☑ |
+| C.2 | Operator “Live activity” tab | ☑ |
+| C.3 | Regional map (Kenya counties) | ☑ |
+| C.4 | Regional tabs: commercial, player safety, behaviour, spend | ☑ |
+| C.5 | Play Safe bar chart by county | ☑ |
+| C.6 | Peak play time heatmap | ☑ |
+| C.7 | Anonymised data disclaimer + export button | ☑ |
+| C.8 | Reports hub card grid | ☑ |
+| C.9 | Report generator modal + download UX | ☑ |
 
 ### UI Phase D — Payment gateway UI (with PROJECT_PLAN Phase 7)
 

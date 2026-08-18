@@ -10,7 +10,7 @@ Last updated: August 2026
 
 A **government supervisory portal** for the **Gambling Regulatory Authority (GRA)** — Kenya’s new division overseeing raffle and competition operators (formerly referenced as BCLB in the UI prototype; **all branding must use GRA**). Authorised staff use it to monitor raffle/competition websites similar to how `/var/www/compgo` manages competitions — but this is the **government side**: oversight, compliance, tax, enforcement, and real-time visibility across **all** operator platforms.
 
-The portal ingests data from **every licensed operator dashboard** (first integration: **ByAnyDream** at `/var/www/byanydream` on the VPS). Operators push commercial, player-safety, and payment events; the government console reflects changes in **real time** (e.g. a ticket purchased on an operator site appears on the GRA dashboard immediately).
+The portal ingests data from **every licensed operator dashboard** (first pilot on the VPS at `/var/www/byanydream`). Operators push commercial, player-safety, and payment events; the government console reflects changes in **real time** (e.g. a ticket purchased on an operator site appears on the GRA dashboard immediately).
 
 ### Core goals
 
@@ -35,7 +35,7 @@ The portal ingests data from **every licensed operator dashboard** (first integr
 | Backend | Not built |
 | Database | Not built |
 | Operator ingest API | Not built |
-| ByAnyDream real-time link | Not built |
+| Operator real-time ingest link | Built (pilot) |
 | Payment gateway (Harambe Pay) | Not built — Force42 partnership |
 | Production VPS | Static site only at `compliance.srv1781529.hstgr.cloud` |
 
@@ -84,11 +84,11 @@ Purpose: **policy adjustment**, **player safety**, and **licensed export** of an
 
 Technical: operators emit `player_safety_event` and `session_aggregate` ingest events; government DB stores only anonymised aggregates.
 
-### 2.4 Real-time integration with operator dashboards (ByAnyDream first)
+### 2.4 Real-time integration with operator dashboards (pilot first, multi-operator)
 
 | Requirement | Detail |
 |-------------|--------|
-| Source | ByAnyDream operator platform (`/var/www/byanydream` on VPS) |
+| Source | Licensed operator platforms (pilot: PHP raffle app on VPS) |
 | Behaviour | Ticket purchase, payment, refund, operator config change → **immediate** on GRA dashboard |
 | Demo value | Show operators and GRA that both systems are interlinked live |
 | Transport | Webhook + optional Redis pub/sub or SSE to staff console |
@@ -138,7 +138,7 @@ GRA wants a **government-aligned payment gateway** (similar to ZapPay for Zap) �
 1. GRA branding (quick win)
 2. Core functionality (registry, submissions, compliance) — UI already approved
 3. Reports section
-4. Real-time ByAnyDream link (demo-critical)
+4. Real-time operator ingest link (demo-critical)
 5. Expanded regional / player safety analytics
 6. Payment gateway module + Harambe Pay integration + real-time tax
 
@@ -744,17 +744,17 @@ X-Idempotency-Key: <unique-per-request>
 | POST | `/v1/heartbeat` | Site alive + version ping |
 | GET | `/v1/status` | Credential check |
 
-### ByAnyDream integration (first operator)
+### Operator platform integration (ingest contract)
 
 | Step | Detail |
 |------|--------|
-| 1 | Map ByAnyDream ticket/payment models to shared ingest schema |
-| 2 | Webhook from ByAnyDream on each ticket sale → ingest API |
+| 1 | Map operator ticket/payment models to shared ingest schema |
+| 2 | Webhook from operator on each ticket sale → ingest API |
 | 3 | Redis pub/sub → SSE/WebSocket to GRA staff console |
 | 4 | Live activity feed on dashboard (ticket count, revenue today) |
-| 5 | Demo mode: buy ticket on ByAnyDream → see update on GRA within seconds |
+| 5 | Demo mode: buy ticket on operator site → see update on GRA within seconds |
 
-Reference codebase: `/var/www/byanydream` (PHP on VPS). Similar raffle model to `/var/www/compgo`.
+Reference kit: `integrations/operator/` in this repo. First pilot operator deployed on VPS at `/var/www/byanydream` (PHP / CodeIgniter).
 
 ### Processing flow
 
@@ -889,7 +889,7 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 | 0.4 | Confirm tax rate (e.g. 30%) and EOD withdrawal rules with GRA | Stakeholders | ☐ |
 | 0.5 | Confirm anonymisation rules for player safety / external data sales | Legal | ☐ |
 | 0.6 | Confirm Harambe Pay partnership terms (Force42 + GRA revenue share) | Business | ☐ |
-| 0.7 | Document ByAnyDream as pilot operator for real-time demo | Dev | ☐ |
+| 0.7 | Document pilot operator for real-time demo | Dev | ☐ |
 
 ---
 
@@ -946,12 +946,12 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 | # | Task | Done |
 |---|------|------|
-| 1.26 | Install Node 22, Postgres, Redis, Nginx on VPS | ☐ |
-| 1.27 | Create `kenji_government` database and user | ☐ |
-| 1.28 | Nginx reverse proxy: HTTPS → Next.js + API | ☐ |
-| 1.29 | PM2 or Docker production compose | ☐ |
-| 1.30 | Run migrations on VPS | ☐ |
-| 1.31 | Smoke test: login, view operators list on production URL | ☐ |
+| 1.26 | Install Node 22, Postgres, Redis, Nginx on VPS | ☑ |
+| 1.27 | Create `kenji_government` database and user | ☑ |
+| 1.28 | Nginx reverse proxy: HTTPS → Next.js + API | ☑ |
+| 1.29 | PM2 or Docker production compose | ☑ |
+| 1.30 | Run migrations on VPS | ☑ |
+| 1.31 | Smoke test: login, view operators list on production URL | ☑ |
 
 **Phase 1 exit criteria:** Staff can log in and view operator registry with seeded data on VPS.
 
@@ -1045,14 +1045,14 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 | # | Task | Done |
 |---|------|------|
 | 3.14 | Operator integration guide (auth, endpoints, examples) | ☑ |
-| 3.15 | Postman collection / example PHP client for ByAnyDream | ☑ |
+| 3.15 | Postman collection / example PHP operator ingest client | ☑ |
 | 3.16 | Sandbox API keys for testing | ☑ |
 
 **Phase 3 exit criteria:** External system can POST monthly return; appears in GRA submissions queue after processing.
 
 ---
 
-### Phase 4 — Real-time integration (ByAnyDream first) (3–4 weeks)
+### Phase 4 — Real-time operator integration (pilot first) (3–4 weeks)
 
 **Goal:** Ticket purchase on operator site visible on GRA dashboard within seconds.
 
@@ -1066,17 +1066,17 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 | 4.4 | Map events to `live_activity_feed` + dashboard counters | ☑ |
 | 4.5 | Redis pub/sub channel per event type | ☑ |
 
-#### 4B — ByAnyDream webhook integration
+#### 4B — Operator webhook integration (pilot)
 
 | # | Task | Done |
 |---|------|------|
-| 4.6 | Audit ByAnyDream ticket/payment code paths (`/var/www/byanydream`) | ☑ |
-| 4.7 | Add webhook emitter on ticket purchase in ByAnyDream | ☑ |
+| 4.6 | Audit pilot operator ticket/payment code paths | ☑ |
+| 4.7 | Add webhook emitter on ticket purchase in operator app | ☑ |
 | 4.8 | Add webhook emitter on payment completion | ☑ |
-| 4.9 | HMAC signing from ByAnyDream to ingest API | ☑ |
+| 4.9 | HMAC signing from operator app to ingest API | ☑ |
 | 4.10 | End-to-end test: buy ticket → GRA feed updates | ☑ |
 
-> **Note:** ByAnyDream hooks live in `integrations/byanydream/` (deployed to VPS `app/Services/GraIngestService.php`). Set `GRA_INGEST_ENABLED=true` when ingest API is reachable. Local E2E: `./scripts/e2e-live-feed-test.sh`.
+> **Note:** Operator ingest hooks live in `integrations/operator/` (copy `GraIngestService.php` into each operator app). Set `GRA_INGEST_ENABLED=true` when ingest API is reachable. Local E2E: `./scripts/e2e-live-feed-test.sh`.
 
 #### 4C — Live staff console
 
@@ -1088,7 +1088,7 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 | 4.14 | "Tickets today" / "Revenue today" counters (real-time) | ☑ |
 | 4.15 | Demo script for stakeholder meetings | ☑ |
 
-**Phase 4 exit criteria:** Demonstrable real-time link ByAnyDream ↔ GRA dashboard.
+**Phase 4 exit criteria:** Demonstrable real-time link operator platform ↔ GRA dashboard.
 
 ---
 
@@ -1098,15 +1098,15 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 | # | Task | Done |
 |---|------|------|
-| 5.1 | DB: `report_definitions`, `report_runs` | ☐ |
-| 5.2 | Seed initial report catalogue (§7.8) | ☐ |
-| 5.3 | Reports hub UI: cards by category | ☐ |
-| 5.4 | Report runner: queue job, generate CSV/PDF | ☐ |
-| 5.5 | Report download from MinIO (signed URL) | ☐ |
-| 5.6 | Role-based report visibility | ☐ |
-| 5.7 | Scheduled reports (BullMQ cron: daily 06:00 EAT) | ☐ |
-| 5.8 | Email report to stakeholder list | ☐ |
-| 5.9 | Report history: who generated what, when | ☐ |
+| 5.1 | DB: `report_definitions`, `report_runs` | ☑ |
+| 5.2 | Seed initial report catalogue (§7.8) | ☑ |
+| 5.3 | Reports hub UI: cards by category | ☑ |
+| 5.4 | Report runner: queue job, generate CSV/PDF | ☑ |
+| 5.5 | Report download from MinIO (signed URL) | ☑ |
+| 5.6 | Role-based report visibility | ☑ |
+| 5.7 | Scheduled reports (BullMQ cron: daily 06:00 EAT) | ☑ |
+| 5.8 | Email report to stakeholder list | ☑ |
+| 5.9 | Report history: who generated what, when | ☑ |
 
 **Phase 5 exit criteria:** Supervisor generates "GGR by operator monthly" PDF from UI.
 
@@ -1120,30 +1120,30 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 | # | Task | Done |
 |---|------|------|
-| 6.1 | `POST /v1/events/player-safety` (play_safe, self_exclusion) | ☐ |
-| 6.2 | `POST /v1/events/session-aggregate` (hourly rollups) | ☐ |
-| 6.3 | Enforce: no raw player IDs in payload (reject if present) | ☐ |
-| 6.4 | ByAnyDream: emit play-safe and session events | ☐ |
+| 6.1 | `POST /v1/events/player-safety` (play_safe, self_exclusion) | ☑ |
+| 6.2 | `POST /v1/events/session-aggregate` (hourly rollups) | ☑ |
+| 6.3 | Enforce: no raw player IDs in payload (reject if present) | ☑ |
+| 6.4 | Operator platforms: emit play-safe and session events | ☑ |
 
 #### 6B — Aggregation pipeline
 
 | # | Task | Done |
 |---|------|------|
-| 6.5 | Nightly job: roll `player_safety_events` → `player_safety_aggregates` | ☐ |
-| 6.6 | County + hour peak calculation | ☐ |
-| 6.7 | Stake band distribution aggregation | ☐ |
+| 6.5 | Nightly job: roll `player_safety_events` → `player_safety_aggregates` | ☑ |
+| 6.6 | County + hour peak calculation | ☑ |
+| 6.7 | Stake band + age band distribution aggregation | ☑ |
 
 #### 6C — Regional UI (expanded)
 
 | # | Task | Done |
 |---|------|------|
-| 6.8 | Map: GGR by county (existing) | ☐ |
-| 6.9 | Play Safe activations by county (bar chart) | ☐ |
-| 6.10 | Peak play time heatmap (hour × day of week) | ☐ |
-| 6.11 | Spend band distribution chart | ☐ |
-| 6.12 | County drill-down page | ☐ |
-| 6.13 | Export anonymised regional dataset (CSV) for external partners | ☐ |
-| 6.14 | Report: "Player safety regional summary" in Reports hub | ☐ |
+| 6.8 | Map: GGR by county (existing) | ☑ |
+| 6.9 | Play Safe activations by county (bar chart) | ☑ |
+| 6.10 | Peak play time heatmap (hour × day of week) | ☑ |
+| 6.11 | Spend band distribution chart | ☑ |
+| 6.12 | County drill-down page | ☑ |
+| 6.13 | Export anonymised regional dataset (CSV) for external partners | ☑ |
+| 6.14 | Report: "Player safety regional summary" in Reports hub | ☑ |
 
 **Phase 6 exit criteria:** Regional page shows play-safe and peak-time data; export works with no PII.
 
@@ -1222,8 +1222,8 @@ Every checkbox is a deliverable. Do not skip items — mark done only when teste
 
 | # | Task | Done |
 |---|------|------|
-| 9.1 | Pilot: ByAnyDream production traffic on ingest | ☐ |
-| 9.2 | Onboard 2nd operator (non-ByAnyDream) | ☐ |
+| 9.1 | Pilot: first operator production traffic on ingest | ☑ |
+| 9.2 | Onboard 2nd operator | ☐ |
 | 9.3 | Onboard 10+ operators | ☐ |
 | 9.4 | Data-sharing agreement templates (operators, UN, charities) | ☐ |
 | 9.5 | External partner API for anonymised regional exports (optional) | ☐ |
@@ -1243,7 +1243,7 @@ Phase 2 (core UI) ────────────────────�
     ↓                                       │
 Phase 3 (monthly ingest)                    │
     ↓                                       │
-Phase 4 (real-time / ByAnyDream)            │
+Phase 4 (real-time operator ingest)            │
     ↓                                       │
 Phase 5 (reports) ← can start after Phase 2 │
     ↓                                       │
@@ -1307,7 +1307,7 @@ Phase 9 (pilot & scale)
 - UI prototype: `/out/` (static Next.js export — **rebrand to GRA**)
 - **UI/UX plan:** `docs/UI_UX_PLAN.md`
 - Similar operator model: `/var/www/compgo` (raffle/competition platform)
-- Pilot operator integration: `/var/www/byanydream` (VPS)
+- Operator integration kit: `integrations/operator/` (pilot VPS path: `/var/www/byanydream`)
 - VPS static site: `https://compliance.srv1781529.hstgr.cloud`
 - Payment product: Harambe Pay (Force42 partnership)
 - **Operator raffle platform (build after):** `/var/www/Kenji-raffle/docs/PROJECT_PLAN_2.md`

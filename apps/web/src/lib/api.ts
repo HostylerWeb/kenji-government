@@ -493,3 +493,176 @@ export async function downloadWithAuth(token: string, path: string) {
   if (!response.ok) throw new ApiError("Download failed", response.status);
   return response.blob();
 }
+
+export type ReportDefinition = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  category: string;
+  required_role: string;
+  parameters_schema: {
+    fields?: Array<{
+      name: string;
+      type: string;
+      label: string;
+      default?: string | number;
+      min?: number;
+      max?: number;
+    }>;
+    defaults?: Record<string, unknown>;
+  };
+  is_scheduled: boolean;
+  schedule_recipients: string[] | null;
+  schedule_cadence: string | null;
+};
+
+export type ReportRun = {
+  id: string;
+  slug: string;
+  title: string;
+  category?: string;
+  parameters: Record<string, unknown>;
+  format: "csv" | "pdf";
+  status: string;
+  error_message: string | null;
+  is_scheduled: boolean;
+  completed_at: string | null;
+  created_at: string;
+  requested_by: { full_name: string; email: string } | null;
+};
+
+export async function getReports(token: string) {
+  return apiRequest<ReportDefinition[]>("/reports", { token });
+}
+
+export async function getReport(token: string, slug: string) {
+  return apiRequest<ReportDefinition>(`/reports/${slug}`, { token });
+}
+
+export async function getScheduledReports(token: string) {
+  return apiRequest<ReportDefinition[]>("/reports/scheduled", { token });
+}
+
+export async function getReportRuns(token: string, limit = 50) {
+  return apiRequest<ReportRun[]>(`/reports/runs?limit=${limit}`, { token });
+}
+
+export async function getReportRun(token: string, runId: string) {
+  return apiRequest<ReportRun>(`/reports/runs/${runId}`, { token });
+}
+
+export async function runReport(
+  token: string,
+  slug: string,
+  data: { format: "csv" | "pdf"; parameters?: Record<string, unknown> },
+) {
+  return apiRequest<ReportRun>(`/reports/${slug}/run`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export async function downloadReportRun(token: string, runId: string) {
+  const response = await fetch(`${API_URL}/reports/runs/${runId}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new ApiError("Download failed", response.status);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const data = await response.json();
+    if (data.download_url) {
+      window.open(data.download_url, "_blank");
+      return;
+    }
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? `report-${runId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export interface RegionalCountyCommercial {
+  county: string;
+  region: string | null;
+  operator_count: number;
+  annual_ggr: number;
+}
+
+export interface RegionalOverview {
+  days: number;
+  counties: RegionalCountyCommercial[];
+  play_safe_by_county: Array<{ county: string; count: number }>;
+  self_exclusion_by_county: Array<{ county: string; count: number }>;
+  peak_time_heatmap: {
+    matrix: Record<string, number[]>;
+    day_labels: string[];
+    hours: number[];
+  };
+  stake_band_distribution: Array<{ band: string; count: number }>;
+  age_band_distribution: Array<{ band: string; count: number }>;
+  disclaimer: string;
+}
+
+export interface RegionalCountyDetail {
+  county: string;
+  days: number;
+  operators: Array<{
+    external_id: string;
+    trading_name: string;
+    annual_ggr: string | null;
+    compliance_status: string;
+  }>;
+  operator_count: number;
+  annual_ggr_total: number;
+  play_safe_activations: number;
+  self_exclusion_requests: number;
+  session_count: number;
+  peak_time_heatmap: Record<string, number[]>;
+  stake_band_distribution: Record<string, number>;
+  age_band_distribution: Record<string, number>;
+  daily_trend: Array<{
+    date: string;
+    play_safe_activations: number;
+    self_exclusion_requests: number;
+    session_count: number;
+  }>;
+  disclaimer: string;
+}
+
+export async function getRegionalOverview(token: string, days = 30) {
+  return apiRequest<RegionalOverview>(`/regional/overview?days=${days}`, { token });
+}
+
+export async function getRegionalCounty(token: string, county: string, days = 30) {
+  return apiRequest<RegionalCountyDetail>(
+    `/regional/counties/${encodeURIComponent(county)}?days=${days}`,
+    { token },
+  );
+}
+
+export async function exportRegionalDataset(token: string, days = 30) {
+  const response = await fetch(`${API_URL}/regional/export?days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new ApiError("Export failed", response.status);
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? "gra-regional-export.csv";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

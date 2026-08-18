@@ -14,6 +14,7 @@ import {
   X,
   ClipboardList,
   Scale,
+  FileBarChart,
 } from "lucide-react";
 import { useState } from "react";
 import type { AuthUser } from "@kenji-government/shared";
@@ -25,9 +26,10 @@ const navItems = [
   { href: "/operators", label: "Operators", icon: Building2 },
   { href: "/submissions", label: "Submissions", icon: FileText },
   { href: "/compliance", label: "Compliance", icon: Scale },
+  { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/enforcement", label: "Enforcement", icon: Shield },
   { href: "/audit", label: "Audit Log", icon: ClipboardList },
-  { href: "/regional", label: "Regional & Player Safety", icon: MapPin, disabled: true },
+  { href: "/regional", label: "Regional & Player Safety", icon: MapPin },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -75,19 +77,6 @@ export function AppShell({
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-              if (item.disabled) {
-                return (
-                  <div
-                    key={item.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/40"
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                    <span className="ml-auto text-xs">Soon</span>
-                  </div>
-                );
-              }
 
               return (
                 <Link

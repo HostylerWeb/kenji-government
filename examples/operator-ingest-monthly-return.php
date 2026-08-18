@@ -1,31 +1,31 @@
 <?php
 /**
- * Example: emit a real-time ticket purchase to GRA Ingest API (op-001 sandbox).
+ * Example: submit monthly return to GRA Ingest API (op-001 sandbox).
  *
- * Usage: php examples/byanydream-ticket-event.php
+ * Usage: php examples/operator-ingest-monthly-return.php
  */
 
 $baseUrl = getenv('GRA_INGEST_URL') ?: 'http://localhost:4001/v1';
 $apiKey = getenv('GRA_API_KEY') ?: 'gra_sandbox_op001_devkey0001';
 $hmacSecret = getenv('GRA_HMAC_SECRET') ?: 'sandbox_hmac_op001_secret_32chars_min';
 
-$now = new DateTimeImmutable('now', new DateTimeZone('Africa/Nairobi'));
-
 $payload = [
-    'action' => 'purchased',
-    'ticket_id' => 'TKT-' . bin2hex(random_bytes(4)),
-    'raffle_id' => 'raffle-weekly-001',
-    'raffle_name' => 'Weekly Dream Draw',
-    'amount' => 500,
-    'currency' => 'KES',
-    'purchased_at' => $now->format('Y-m-d\TH:i:sP'),
+    'reporting_year' => 2026,
+    'reporting_month' => 7,
+    'tickets_sold' => 13200,
+    'gross_revenue' => 54800000,
+    'prizes_paid' => 27400000,
+    'expenses' => 6800000,
+    'gross_gaming_revenue' => 42000000,
+    'tax_paid' => 5200000,
+    'notes' => 'July 2026 return via operator platform example client',
 ];
 
 $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
 $signature = hash_hmac('sha256', $body, $hmacSecret);
-$idempotencyKey = 'ticket-' . $payload['ticket_id'];
+$idempotencyKey = 'monthly-op-001-2026-07-example-' . time();
 
-$ch = curl_init($baseUrl . '/events/ticket');
+$ch = curl_init($baseUrl . '/returns/monthly');
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_RETURNTRANSFER => true,

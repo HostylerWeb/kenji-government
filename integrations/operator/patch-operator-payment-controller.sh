@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
+# Patch an operator app's PaymentController to emit GRA live ingest events.
+# Set OPERATOR_APP_ROOT to the operator PHP app root on the server.
 set -euo pipefail
 
-FILE="/var/www/byanydream/app/Controllers/Api/PaymentController.php"
+OPERATOR_APP_ROOT="${OPERATOR_APP_ROOT:-/var/www/operator-app}"
+FILE="${OPERATOR_APP_ROOT}/app/Controllers/Api/PaymentController.php"
+
+if [ ! -f "$FILE" ]; then
+  echo "PaymentController not found at: $FILE"
+  echo "Set OPERATOR_APP_ROOT to your operator application root."
+  exit 1
+fi
 
 if grep -q "emitGraLiveEvents" "$FILE"; then
   echo "Already patched."
   exit 0
 fi
 
+export PATCH_FILE="$FILE"
+
 python3 <<'PY'
+import os
 from pathlib import Path
-path = Path("/var/www/byanydream/app/Controllers/Api/PaymentController.php")
+
+path = Path(os.environ["PATCH_FILE"])
 text = path.read_text()
 
 helper = '''

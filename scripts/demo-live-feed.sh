@@ -15,7 +15,7 @@ echo ""
 
 for i in $(seq 1 "$COUNT"); do
   echo "--- Event $i ---"
-  php "$ROOT/examples/byanydream-ticket-event.php"
+  php "$ROOT/examples/operator-ingest-ticket-event.php"
   sleep 2
 done
 

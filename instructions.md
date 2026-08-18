@@ -7,7 +7,7 @@ Local development guide for the monorepo: staff web app, staff API, operator ing
 - **Node.js** 20+ (22 recommended)
 - **npm** (workspaces monorepo)
 - **Docker** + Docker Compose (Postgres, Redis, MinIO)
-- **PHP** (optional — only for `examples/byanydream-monthly-return.php`)
+- **PHP** (optional — only for `examples/operator-ingest-*.php`)
 
 Project path: `/var/www/kenji-government`
 
@@ -18,7 +18,7 @@ Project path: `/var/www/kenji-government`
 | **Web** (Next.js) | 3000 | GRA staff console UI |
 | **Staff API** (NestJS) | 4000 | Login, operators, submissions, compliance, etc. |
 | **Ingest API** (NestJS) | 4001 | Operator monthly returns / documents (Phase 3) |
-| **Worker** (BullMQ) | — | Processes ingest queue → submissions |
+| **Worker** (BullMQ) | — | Processes ingest queue + report generation |
 | **Postgres** | 5436 | Main database (`kenji_government`) |
 | **Redis** | 6382 | Queues + rate limiting |
 | **MinIO** | 9000 / 9001 | Document storage (API / console) |
@@ -112,7 +112,7 @@ cd /var/www/kenji-government
 npm run dev:ingest
 ```
 
-**Terminal 4 — Worker** (required for ingest monthly returns to appear in submissions):
+**Terminal 4 — Worker** (required for ingest monthly returns and report PDF/CSV generation):
 
 ```bash
 cd /var/www/kenji-government
@@ -141,6 +141,8 @@ This starts every workspace `dev` script that exists (api, web, worker). **Inges
 | What | URL |
 |------|-----|
 | **Staff console** | http://localhost:3000 |
+| **Reports hub** | http://localhost:3000/reports |
+| **Regional & player safety** | http://localhost:3000/regional |
 | **Login** | http://localhost:3000/login |
 | **Staff API** | http://localhost:4000 |
 | **Staff API Swagger** | http://localhost:4000/docs |
@@ -164,7 +166,7 @@ This starts every workspace `dev` script that exists (api, web, worker). **Inges
 |-------|-------|
 | API Key | `gra_sandbox_op001_devkey0001` |
 | HMAC Secret | `sandbox_hmac_op001_secret_32chars_min` |
-| Test script | `php examples/byanydream-monthly-return.php` |
+| Test script | `php examples/operator-ingest-monthly-return.php` |
 
 See `docs/API.md` and `docs/OPERATOR_INTEGRATION.md` for signing and endpoints.
 
@@ -198,10 +200,11 @@ curl http://localhost:4000/health
 
 # Ingest API status (requires signed headers — see docs/API.md)
 # Or use the PHP example for a full ingest test
-php examples/byanydream-monthly-return.php
-php examples/byanydream-ticket-event.php   # live dashboard demo
+php examples/operator-ingest-monthly-return.php
+php examples/operator-ingest-ticket-event.php   # live dashboard demo
 ./scripts/demo-live-feed.sh 5              # stakeholder demo (5 tickets)
 ./scripts/e2e-live-feed-test.sh            # automated E2E pipeline check
+./scripts/e2e-regional-test.sh             # Phase 6 regional API smoke test
 ```
 
 ### Live feed demo (Phase 4)
@@ -211,7 +214,7 @@ With `dev:api`, `dev:ingest`, and `dev:web` running, open the dashboard and run:
 ```bash
 ./scripts/demo-live-feed.sh 5
 # or single ticket:
-php examples/byanydream-ticket-event.php
+php examples/operator-ingest-ticket-event.php
 ```
 
 Watch **Tickets Today**, **Revenue Today**, and the live activity ticker update at http://localhost:3000/dashboard.
@@ -290,7 +293,7 @@ npm run build -w @kenji-government/shared   # if shared types changed
 
 ## Production / VPS (not automated yet)
 
-Phase 1 VPS deploy (Nginx, PM2, HTTPS) is documented in `docs/PROJECT_PLAN.md` (items 1.26–1.31). Local instructions above are for development only.
+Phase 1 VPS deploy: see `docs/DEPLOY.md` (items 1.26–1.31). Local instructions below are for development only.
 
 Planned production URLs:
 

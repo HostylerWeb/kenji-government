@@ -14,6 +14,8 @@ import { DocumentsModule } from "./documents/documents.module";
 import { UsersModule } from "./users/users.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { LiveApiModule } from "./live/live-api.module";
+import { ReportsModule } from "./reports/reports.module";
+import { RegionalModule } from "./regional/regional.module";
 import { AuditInterceptor } from "./audit/audit.interceptor";
 
 @Module({
@@ -32,6 +34,8 @@ import { AuditInterceptor } from "./audit/audit.interceptor";
     UsersModule,
     DashboardModule,
     LiveApiModule,
+    ReportsModule,
+    RegionalModule,
   ],
   providers: [
     {

@@ -1,9 +1,11 @@
-import { PrismaClient, user_role } from "@prisma/client";
+import { PrismaClient, user_role, report_category } from "@prisma/client";
+import { REPORT_SLUGS } from "@kenji-government/shared";
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import { config as loadEnv } from "dotenv";
 import { resolve } from "path";
 import { encryptIngestSecret } from "@kenji-government/shared";
+import { aggregatePlayerSafetyRange } from "../../../apps/worker/src/player-safety/aggregate-player-safety";
 
 loadEnv({ path: resolve(__dirname, "../../../.env") });
 
@@ -620,6 +622,122 @@ async function main() {
     }
   }
 
+  console.log("Seeding report catalogue...");
+  const REPORT_DEFINITIONS = [
+    {
+      slug: REPORT_SLUGS.GGR_BY_OPERATOR_MONTHLY,
+      title: "GGR by Operator (Monthly)",
+      description: "Gross gaming revenue and tax paid per operator for a reporting month.",
+      category: report_category.commercial,
+      required_role: user_role.analyst,
+      parameters_schema: {
+        fields: [
+          { name: "year", type: "number", label: "Year", default: 2026 },
+          { name: "month", type: "number", label: "Month", min: 1, max: 12, default: 7 },
+        ],
+        defaults: { year: 2026, month: 7 },
+      },
+      is_scheduled: true,
+      schedule_recipients: ["supervisor@gra.go.ke"],
+      schedule_cadence: "daily",
+    },
+    {
+      slug: REPORT_SLUGS.TAX_COLLECTED_VS_DUE,
+      title: "Tax Collected vs Due",
+      description: "Outstanding tax positions across active operators.",
+      category: report_category.commercial,
+      required_role: user_role.supervisor,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: false,
+    },
+    {
+      slug: REPORT_SLUGS.COMPLIANCE_STATUS_SUMMARY,
+      title: "Compliance Status Summary",
+      description: "Operator counts by compliance tier.",
+      category: report_category.compliance,
+      required_role: user_role.auditor,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: true,
+      schedule_recipients: ["supervisor@gra.go.ke", "analyst@gra.go.ke"],
+      schedule_cadence: "daily",
+    },
+    {
+      slug: REPORT_SLUGS.REGIONAL_COMMERCIAL_SUMMARY,
+      title: "Regional Commercial Summary",
+      description: "Active operators and annual GGR grouped by county.",
+      category: report_category.regional,
+      required_role: user_role.analyst,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: false,
+    },
+    {
+      slug: REPORT_SLUGS.PLAYER_SAFETY_AGGREGATES,
+      title: "Player Safety Regional Summary",
+      description:
+        "Anonymised play-safe activations, self-exclusions, and session patterns by county.",
+      category: report_category.player_safety,
+      required_role: user_role.analyst,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: false,
+    },
+    {
+      slug: REPORT_SLUGS.PAYMENT_GATEWAY_DAILY_VOLUME,
+      title: "Payment Gateway Daily Volume",
+      description: "Daily payment volumes via Harambe Pay (Phase 7).",
+      category: report_category.payment,
+      required_role: user_role.supervisor,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: false,
+    },
+    {
+      slug: REPORT_SLUGS.AML_ALERT_SUMMARY,
+      title: "AML Alert Summary",
+      description: "Open AML alerts and review status (Phase 7).",
+      category: report_category.compliance,
+      required_role: user_role.supervisor,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: false,
+    },
+    {
+      slug: REPORT_SLUGS.OPERATOR_LICENCE_EXPIRY,
+      title: "Operator Licence Expiry",
+      description: "Licences expiring within the next 90 days.",
+      category: report_category.compliance,
+      required_role: user_role.analyst,
+      parameters_schema: { fields: [], defaults: {} },
+      is_scheduled: true,
+      schedule_recipients: ["supervisor@gra.go.ke"],
+      schedule_cadence: "daily",
+    },
+  ];
+
+  for (const report of REPORT_DEFINITIONS) {
+    await prisma.report_definitions.upsert({
+      where: { slug: report.slug },
+      update: {
+        title: report.title,
+        description: report.description,
+        category: report.category,
+        required_role: report.required_role,
+        parameters_schema: report.parameters_schema,
+        is_scheduled: report.is_scheduled,
+        schedule_recipients: report.schedule_recipients ?? undefined,
+        schedule_cadence: report.schedule_cadence ?? undefined,
+      },
+      create: {
+        slug: report.slug,
+        title: report.title,
+        description: report.description,
+        category: report.category,
+        required_role: report.required_role,
+        parameters_schema: report.parameters_schema,
+        is_scheduled: report.is_scheduled,
+        schedule_recipients: report.schedule_recipients ?? undefined,
+        schedule_cadence: report.schedule_cadence ?? undefined,
+      },
+    });
+  }
+
   console.log("Seeding sandbox API credentials (op-001)...");
   const sandboxSite = await prisma.operator_sites.findFirst({
     where: {
@@ -646,6 +764,119 @@ async function main() {
         },
       });
     }
+  }
+
+  console.log("Seeding player safety demo events...");
+  const primarySite = await prisma.operator_sites.findFirst({
+    where: {
+      is_primary: true,
+      operator: { external_id: "op-001" },
+    },
+  });
+
+  if (primarySite) {
+    await prisma.player_safety_events.deleteMany({
+      where: { operator_site_id: primarySite.id },
+    });
+    await prisma.session_aggregate_events.deleteMany({
+      where: { operator_site_id: primarySite.id },
+    });
+    await prisma.player_safety_aggregates.deleteMany({});
+
+    const counties = [
+      "Nairobi",
+      "Mombasa",
+      "Kisumu",
+      "Nyeri",
+      "Kiambu",
+      "Nakuru",
+    ];
+    const stakeBands = [
+      "0-50", "51-100", "101-250", "251-500", "501-1000", "1001+",
+    ];
+    const ageBands = ["18-24", "25-34", "35-44", "45-54", "55+"];
+
+    for (let dayOffset = 13; dayOffset >= 0; dayOffset -= 1) {
+      const bucketDate = new Date();
+      bucketDate.setUTCDate(bucketDate.getUTCDate() - dayOffset);
+      bucketDate.setUTCHours(0, 0, 0, 0);
+
+      for (const county of counties) {
+        const playSafeCount = 2 + Math.floor(Math.random() * 8);
+        for (let i = 0; i < playSafeCount; i += 1) {
+          const occurredAt = new Date(bucketDate);
+          occurredAt.setUTCHours(8 + Math.floor(Math.random() * 12));
+          occurredAt.setUTCMinutes(Math.floor(Math.random() * 60));
+          await prisma.player_safety_events.create({
+            data: {
+              operator_site_id: primarySite.id,
+              event_type: "play_safe",
+              county,
+              region: county === "Nairobi" ? "Central" : "Coast",
+              hour_of_day: occurredAt.getUTCHours(),
+              day_of_week: occurredAt.getUTCDay(),
+              occurred_at: occurredAt,
+            },
+          });
+        }
+
+        if (Math.random() > 0.6) {
+          const occurredAt = new Date(bucketDate);
+          occurredAt.setUTCHours(14);
+          await prisma.player_safety_events.create({
+            data: {
+              operator_site_id: primarySite.id,
+              event_type: "self_exclusion",
+              county,
+              hour_of_day: 14,
+              day_of_week: occurredAt.getUTCDay(),
+              occurred_at: occurredAt,
+            },
+          });
+        }
+
+        for (let hour = 10; hour <= 22; hour += 2) {
+          const bucketStart = new Date(bucketDate);
+          bucketStart.setUTCHours(hour, 0, 0, 0);
+          const sessionCount = 20 + Math.floor(Math.random() * 80);
+          const bandDistribution: Record<string, number> = {};
+          const ageDistribution: Record<string, number> = {};
+          for (const band of stakeBands) {
+            bandDistribution[band] = Math.floor(Math.random() * sessionCount / 3);
+          }
+          for (const band of ageBands) {
+            ageDistribution[band] = Math.floor(Math.random() * sessionCount / 4);
+          }
+          await prisma.session_aggregate_events.upsert({
+            where: {
+              operator_site_id_county_bucket_start: {
+                operator_site_id: primarySite.id,
+                county,
+                bucket_start: bucketStart,
+              },
+            },
+            create: {
+              operator_site_id: primarySite.id,
+              county,
+              bucket_start: bucketStart,
+              day_of_week: bucketStart.getUTCDay(),
+              hour_of_day: hour,
+              session_count: sessionCount,
+              total_session_minutes: sessionCount * (15 + Math.floor(Math.random() * 30)),
+              stake_band_distribution: bandDistribution,
+              age_band_distribution: ageDistribution,
+            },
+            update: {
+              session_count: sessionCount,
+              total_session_minutes: sessionCount * (15 + Math.floor(Math.random() * 30)),
+              stake_band_distribution: bandDistribution,
+              age_band_distribution: ageDistribution,
+            },
+          });
+        }
+      }
+    }
+    await aggregatePlayerSafetyRange(prisma, 14);
   }
 
   console.log("Seed complete.");

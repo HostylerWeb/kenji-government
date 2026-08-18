@@ -161,6 +161,69 @@ Operator site metadata change (e.g. maintenance mode).
 }
 ```
 
+### `POST /v1/events/player-safety`
+
+Anonymised Play Safe or self-exclusion event. **No player identifiers** — payloads containing fields such as `player_id`, `email`, or `phone` are rejected with `400`.
+
+**Body**
+
+```json
+{
+  "event_type": "play_safe",
+  "county": "Nairobi",
+  "region": "Central",
+  "occurred_at": "2026-08-18T10:30:00+03:00"
+}
+```
+
+`event_type`: `play_safe` | `self_exclusion`
+
+### `POST /v1/events/session-aggregate`
+
+Hourly anonymised session rollup with stake-band distribution (no player IDs).
+
+**Body**
+
+```json
+{
+  "county": "Mombasa",
+  "region": "Coast",
+  "bucket_start": "2026-08-18T14:00:00+03:00",
+  "session_count": 142,
+  "total_session_minutes": 3180,
+  "stake_band_distribution": {
+    "0-50": 45,
+    "51-100": 38,
+    "101-250": 30,
+    "251-500": 18,
+    "501-1000": 7,
+    "1001+": 2
+  },
+  "age_band_distribution": {
+    "18-24": 52,
+    "25-34": 48,
+    "35-44": 22,
+    "45-54": 12,
+    "55+": 8
+  }
+}
+```
+
+Stake bands: `0-50`, `51-100`, … `1001+` (KES).  
+Age bands: `18-24`, `25-34`, `35-44`, `45-54`, `55+` (anonymised buckets only).
+
+## Staff API — Regional analytics
+
+Base URL (local): `http://localhost:4000` — JWT required.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/regional/overview?days=30` | County GGR, play-safe, heatmap, stake bands |
+| `GET` | `/regional/counties/:county?days=30` | County drill-down |
+| `GET` | `/regional/export?days=30` | Anonymised CSV for licensed partners |
+
+Staff console UI: http://localhost:3000/regional
+
 ## Idempotency
 
 Duplicate `X-Idempotency-Key` returns the original ingest event response without re-processing.

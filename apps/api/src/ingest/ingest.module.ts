@@ -8,6 +8,7 @@ import { IngestService } from "./ingest.service";
 import { IngestQueueService } from "./ingest-queue.service";
 import { RateLimitService } from "./rate-limit.service";
 import { RealtimeEventsService } from "./realtime-events.service";
+import { PlayerSafetyEventsService } from "./player-safety-events.service";
 import { ApiKeyHmacGuard } from "./guards/api-key-hmac.guard";
 
 @Module({
@@ -18,6 +19,7 @@ import { ApiKeyHmacGuard } from "./guards/api-key-hmac.guard";
     IngestQueueService,
     RateLimitService,
     RealtimeEventsService,
+    PlayerSafetyEventsService,
     ApiKeyHmacGuard,
   ],
 })

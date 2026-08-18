@@ -3,8 +3,16 @@ import { resolve } from "path";
 import { Worker, Queue } from "bullmq";
 import Redis from "ioredis";
 import { PrismaClient } from "@prisma/client";
-import { INGEST_DLQ_NAME, INGEST_QUEUE_NAME } from "@kenji-government/shared";
+import {
+  INGEST_DLQ_NAME,
+  INGEST_QUEUE_NAME,
+  REPORT_QUEUE_NAME,
+} from "@kenji-government/shared";
 import { processMonthlyReturn } from "./processors/monthly-return.processor";
+import { processReportRun, runScheduledReports } from "./reports/process-report";
+import {
+  aggregatePlayerSafetyRange,
+} from "./player-safety/aggregate-player-safety";
 
 loadEnv({ path: resolve(__dirname, "../../../.env") });
 
@@ -12,6 +20,7 @@ const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6382";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const prisma = new PrismaClient();
 const deadLetterQueue = new Queue(INGEST_DLQ_NAME, { connection });
+const reportQueue = new Queue(REPORT_QUEUE_NAME, { connection });
 
 async function recordAdminAlert(ingestEventId: string, errorMessage: string) {
   const admin = await prisma.users.findFirst({
@@ -30,7 +39,7 @@ async function recordAdminAlert(ingestEventId: string, errorMessage: string) {
   });
 }
 
-const worker = new Worker(
+const ingestWorker = new Worker(
   INGEST_QUEUE_NAME,
   async (job) => {
     if (job.name === "monthly-return") {
@@ -40,7 +49,7 @@ const worker = new Worker(
   { connection, concurrency: 5 },
 );
 
-worker.on("failed", async (job, error) => {
+ingestWorker.on("failed", async (job, error) => {
   if (!job) return;
   const ingestEventId = job.data?.ingestEventId as string | undefined;
   if (!ingestEventId) return;
@@ -78,4 +87,61 @@ worker.on("failed", async (job, error) => {
   console.error(`Ingest job moved to DLQ: ${ingestEventId} — ${error.message}`);
 });
 
-console.log(`Worker listening on queue: ${INGEST_QUEUE_NAME}`);
+async function registerScheduledReports() {
+  await reportQueue.add(
+    "scheduled-daily",
+    {},
+    {
+      repeat: { pattern: "0 3 * * *" },
+      jobId: "scheduled-daily-reports",
+    },
+  );
+  console.log("Scheduled daily reports at 06:00 EAT (03:00 UTC)");
+}
+
+async function registerPlayerSafetyAggregation() {
+  await reportQueue.add(
+    "player-safety-nightly",
+    {},
+    {
+      repeat: { pattern: "0 21 * * *" },
+      jobId: "player-safety-nightly-aggregate",
+    },
+  );
+  console.log("Scheduled player safety aggregation at midnight EAT (21:00 UTC)");
+}
+
+registerScheduledReports().catch((err) => {
+  console.error("Failed to register scheduled reports:", err);
+});
+
+registerPlayerSafetyAggregation().catch((err) => {
+  console.error("Failed to register player safety aggregation:", err);
+});
+
+const reportWorker = new Worker(
+  REPORT_QUEUE_NAME,
+  async (job) => {
+    if (job.name === "generate") {
+      await processReportRun(prisma, job.data.reportRunId);
+    }
+    if (job.name === "scheduled-daily") {
+      await runScheduledReports(prisma);
+    }
+    if (job.name === "player-safety-nightly") {
+      const result = await aggregatePlayerSafetyRange(prisma, 1);
+      console.log(
+        `Player safety aggregation complete: ${JSON.stringify(result)}`,
+      );
+    }
+  },
+  { connection, concurrency: 2 },
+);
+
+reportWorker.on("failed", (job, error) => {
+  console.error(`Report job failed: ${job?.id} — ${error.message}`);
+});
+
+console.log(
+  `Worker listening on queues: ${INGEST_QUEUE_NAME}, ${REPORT_QUEUE_NAME}`,
+);

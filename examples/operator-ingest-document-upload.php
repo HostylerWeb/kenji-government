@@ -2,7 +2,7 @@
 /**
  * Example: upload a document via GRA Ingest API (op-001 sandbox).
  *
- * Usage: php examples/byanydream-document-upload.php /path/to/file.pdf
+ * Usage: php examples/operator-ingest-document-upload.php /path/to/file.pdf
  */
 
 $baseUrl = getenv('GRA_INGEST_URL') ?: 'http://localhost:4001/v1';
