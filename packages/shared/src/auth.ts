@@ -16,7 +16,10 @@ export const mfaVerifySchema = z.object({
 
 export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
 
-export const emailOtpVerifySchema = mfaVerifySchema;
+export const emailOtpVerifySchema = z.object({
+  challenge_token: z.string().min(1),
+  code: z.string().min(4).max(8),
+});
 
 export type EmailOtpVerifyInput = z.infer<typeof emailOtpVerifySchema>;
 
