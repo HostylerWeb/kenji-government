@@ -11,7 +11,7 @@
     "dev:ingest": "npm run dev:ingest -w @kenji-government/api",
     "dev:worker": "npm run dev -w @kenji-government/worker",
     "dev:web": "npm run dev -w @kenji-government/web",
-    "build": "npm run build -w @kenji-government/database && npm run build --workspaces --if-present",
+    "build": "npm run build -w @kenji-government/database && npm run build -w @kenji-government/shared && npm run build --workspaces --if-present",
     "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\" --max-warnings 0",
     "typecheck": "npm run build -w @kenji-government/database && npm run build -w @kenji-government/shared && npm run build -w @kenji-government/api && npm run build -w @kenji-government/worker && npm run typecheck -w @kenji-government/web",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",

@@ -9,7 +9,7 @@ REPO="https://github.com/HostylerWeb/kenji-government.git"
 
 echo "=== GRA VPS deploy ==="
 
-ssh -o StrictHostKeyChecking=no "$VPS_HOST" bash -s <<'REMOTE'
+ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no "$VPS_HOST" bash -s <<'REMOTE'
 set -euo pipefail
 
 OLD_PATH="/var/www/government"
@@ -37,28 +37,34 @@ cd "$DEPLOY_PATH"
 
 # Bootstrap postgres/redis if missing
 if ! command -v docker >/dev/null; then
-  apt-get update && apt-get install -y docker.io docker-compose-plugin git
+  apt-get update && apt-get install -y docker.io docker-compose git
+  systemctl enable --now docker
 fi
 
-cd "$DEPLOY_PATH"
-docker compose up -d postgres redis minio
+docker-compose up -d postgres redis minio 2>/dev/null || docker compose up -d postgres redis minio
+sleep 8
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  JWT_SECRET="$(openssl rand -hex 32)"
-  JWT_REFRESH="$(openssl rand -hex 32)"
-  INGEST_KEY="$(openssl rand -hex 32)"
-  sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgresql://kenji_government:kenji_government@localhost:5436/kenji_government?schema=public\"|" .env
-  sed -i "s|REDIS_URL=.*|REDIS_URL=\"redis://localhost:6382\"|" .env
-  sed -i "s|JWT_SECRET=.*|JWT_SECRET=\"${JWT_SECRET}\"|" .env
-  sed -i "s|JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=\"${JWT_REFRESH}\"|" .env
-  sed -i "s|INGEST_ENCRYPTION_KEY=.*|INGEST_ENCRYPTION_KEY=\"${INGEST_KEY}\"|" .env
-  echo "Created .env with docker-compose ports (5436/6382)"
+fi
+JWT_SECRET="$(openssl rand -hex 32)"
+JWT_REFRESH="$(openssl rand -hex 32)"
+INGEST_KEY="$(openssl rand -hex 32)"
+sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgresql://kenji_government:kenji_government@localhost:5436/kenji_government?schema=public\"|" .env
+sed -i "s|REDIS_URL=.*|REDIS_URL=\"redis://localhost:6382\"|" .env
+sed -i "s|JWT_SECRET=.*|JWT_SECRET=\"${JWT_SECRET}\"|" .env
+sed -i "s|JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=\"${JWT_REFRESH}\"|" .env
+sed -i "s|INGEST_ENCRYPTION_KEY=.*|INGEST_ENCRYPTION_KEY=\"${INGEST_KEY}\"|" .env
+
+if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
 fi
 
 npm ci
+npm run db:generate
 npm run build
-npm run db:migrate
+npm run migrate:deploy -w @kenji-government/database
 npm run db:seed
 
 # Web env
