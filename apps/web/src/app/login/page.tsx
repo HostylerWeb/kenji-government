@@ -102,8 +102,10 @@ export default function LoginPage() {
       if (isLoginResponse(response)) {
         setChallengeToken(response.challenge_token);
         setOtpCode("");
-        setStep("mfa");
-        setInfo("Enter your Google Authenticator code to continue.");
+        if (response.status === "mfa_required") {
+          setStep("mfa");
+          setInfo("Enter your Google Authenticator code to continue.");
+        }
         return;
       }
       finishLogin(response);

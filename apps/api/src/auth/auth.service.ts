@@ -76,6 +76,7 @@ export class AuthService {
       fpHash ? await this.devices.isDeviceTrusted(user.id, fpHash) : true;
 
     const needsEmailOtp =
+      !isEmailOtpDisabled() &&
       user.email_otp_new_device_enabled &&
       fpHash &&
       !deviceTrusted;

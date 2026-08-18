@@ -199,8 +199,6 @@ export default function OperatorDetailPage() {
     }
   }
 
-  if (!user) return null;
-
   const chartData =
     operator?.monthly_snapshots?.map((s) => ({
       label: s.reporting_period.label,
@@ -219,6 +217,8 @@ export default function OperatorDetailPage() {
       .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
       .slice(0, 30);
   }, [liveStreamEvents, liveActivity]);
+
+  if (!user) return null;
 
   return (
     <AppShell
