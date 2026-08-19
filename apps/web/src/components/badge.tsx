@@ -1,49 +1,91 @@
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-export function Badge({
-  children,
-  variant = "default",
-  className,
-}: {
-  children: React.ReactNode;
-  variant?: "default" | "success" | "warning" | "danger" | "muted";
-  className?: string;
-}) {
-  const variants = {
-    default: "bg-secondary text-foreground",
-    success: "bg-green-100 text-green-800",
-    warning: "bg-amber-100 text-amber-800",
-    danger: "bg-red-100 text-red-800",
-    muted: "bg-slate-100 text-slate-600",
-  };
+const badgeVariants = cva(
+  "inline-flex items-center gap-1.5 rounded-full text-xs font-medium",
+  {
+    variants: {
+      variant: {
+        default: "bg-secondary text-foreground border border-border/50",
+        outline: "border border-border text-foreground bg-transparent",
+        success: "bg-success-subtle text-success",
+        warning: "bg-warning-subtle text-warning",
+        danger: "bg-danger-subtle text-danger",
+        primary: "bg-primary-subtle text-primary",
+        muted: "bg-secondary text-muted-foreground",
+      },
+      size: {
+        sm: "px-2 py-0.5 text-[10px]",
+        md: "px-2.5 py-0.5 text-xs",
+        lg: "px-3 py-1 text-sm",
+      },
+      dot: {
+        true: "",
+        false: "",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "md",
+      dot: false,
+    },
+  }
+);
 
+const dotColors: Record<string, string> = {
+  default: "bg-muted-foreground",
+  outline: "bg-muted-foreground",
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
+  primary: "bg-primary",
+  muted: "bg-muted-foreground",
+};
+
+interface BadgeProps
+  extends React.HTMLAttributes<HTMLSpanElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant = "default", size, dot, children, ...props }: BadgeProps) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        variants[variant],
-        className,
-      )}
+      className={cn(badgeVariants({ variant, size, dot, className }))}
+      {...props}
     >
+      {dot && (
+        <span
+          className={cn(
+            "block h-1.5 w-1.5 rounded-full shrink-0",
+            dotColors[variant ?? "default"]
+          )}
+          aria-hidden="true"
+        />
+      )}
       {children}
     </span>
   );
 }
 
-export function complianceBadgeVariant(status: string) {
+export { Badge, badgeVariants };
+
+// ─── Compliance helpers ──────────────────────────────────────
+export function complianceBadgeVariant(
+  status: string
+): "success" | "warning" | "danger" | "muted" {
   switch (status) {
     case "compliant":
-      return "success" as const;
+      return "success";
     case "at_risk":
-      return "warning" as const;
+      return "warning";
     case "non_compliant":
-      return "danger" as const;
+      return "danger";
     default:
-      return "muted" as const;
+      return "muted";
   }
 }
 
-export function complianceLabel(status: string) {
+export function complianceLabel(status: string): string {
   switch (status) {
     case "compliant":
       return "Compliant";

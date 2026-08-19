@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, MapPin } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardHeader } from "@/components/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/card";
+import { Tabs } from "@/components/tabs";
+import { Button } from "@/components/button";
+import { PageHeader } from "@/components/page-header";
 import {
   CountyBarChart,
   PeakTimeHeatmap,
@@ -27,6 +30,12 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "behaviour", label: "Behaviour" },
   { id: "spend", label: "Spend Patterns" },
 ];
+
+// GRA palette – use CSS tokens for charts
+const GRA_GREEN = "hsl(152, 100%, 21%)";
+const GRA_NAVY = "hsl(214, 54%, 23%)";
+const GRA_RED = "hsl(3, 81%, 40%)";
+const PURPLE = "#6B4C9A";
 
 export default function RegionalPage() {
   const { user, token } = useAuth();
@@ -63,165 +72,172 @@ export default function RegionalPage() {
 
   return (
     <AppShell user={user} title="Regional & Player Safety">
-      <div className="mb-6 rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm">
-        <p className="font-medium">Anonymised aggregate data</p>
-        <p className="mt-1 text-muted">
-          {overview?.disclaimer ??
-            "No individual player identifiers are stored or exported."}
-        </p>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
-        >
-          <Download className="h-4 w-4" />
-          {exporting ? "Exporting…" : "Export anonymised dataset (CSV)"}
-        </button>
-      </div>
+      <div className="space-y-5">
+        <PageHeader
+          title="Regional & Player Safety"
+          subtitle="Anonymised aggregate data — no individual player identifiers are stored"
+          breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Regional" }]}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              loading={exporting}
+              leftIcon={<Download className="h-4 w-4" />}
+              onClick={handleExport}
+            >
+              Export CSV
+            </Button>
+          }
+        />
 
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-danger">{error}</p>
-      )}
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              tab === item.id
-                ? "bg-primary text-white"
-                : "bg-secondary text-foreground hover:bg-secondary/80"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "commercial" && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader
-              title="Kenya — GGR by County"
-              description="Interactive map (circle size = annual GGR)"
-            />
-            <KenyaCountyMap
-              metric="annual_ggr"
-              data={(overview?.counties ?? []).map((row) => ({
-                county: row.county,
-                value: row.annual_ggr,
-                operator_count: row.operator_count,
-              }))}
-            />
-          </Card>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader title="GGR by County" description="Bar chart — annual GGR" />
-              <CountyBarChart
-                data={ggrChartData ?? []}
-                dataKey="annual_ggr"
-                label="Annual GGR (KES)"
-                color="#0B3D91"
-              />
-            </Card>
-            <Card>
-              <CardHeader title="County Snapshot" description="Top counties by GGR" />
-              <div className="space-y-2">
-                {(overview?.counties ?? []).slice(0, 8).map((row) => (
-                  <Link
-                    key={row.county}
-                    href={`/regional/${encodeURIComponent(row.county)}`}
-                    className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <MapPin className="h-4 w-4 shrink-0 text-primary" />
-                      <span className="truncate">{row.county}</span>
-                    </span>
-                    <span className="shrink-0 text-muted text-xs sm:text-sm">
-                      {formatNumber(row.operator_count)} ops · {formatKsh(row.annual_ggr)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </Card>
+        {error && (
+          <div className="rounded-lg bg-danger-subtle border border-danger/30 px-4 py-3 text-sm text-danger">
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      {tab === "player_safety" && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader
-              title="Play Safe Activations by County"
-              description="Kenya map (30 days)"
-            />
-            <KenyaCountyMap
-              metric="play_safe"
-              data={(overview?.play_safe_by_county ?? []).map((row) => ({
-                county: row.county,
-                value: row.count,
-              }))}
-            />
-          </Card>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader title="Play Safe Activations" description="By county (30 days)" />
-              <CountyBarChart
-                data={overview?.play_safe_by_county ?? []}
-                dataKey="count"
-                label="Activations"
-              />
-            </Card>
-            <Card>
-              <CardHeader title="Self-Exclusion Requests" description="By county (30 days)" />
-              <CountyBarChart
-                data={overview?.self_exclusion_by_county ?? []}
-                dataKey="count"
-                label="Requests"
-                color="#C0392B"
-              />
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {tab === "behaviour" && (
         <Card>
-          <CardHeader
-            title="Peak Play Time"
-            description="Session intensity heatmap (hour × day of week)"
-          />
-          <PeakTimeHeatmap
-            matrix={overview?.peak_time_heatmap.matrix ?? {}}
-            dayLabels={overview?.peak_time_heatmap.day_labels ?? []}
-          />
+          <CardContent className="pb-0">
+            <Tabs tabs={TABS} active={tab} onChange={(id) => setTab(id as TabId)} variant="underline" />
+          </CardContent>
         </Card>
-      )}
 
-      {tab === "spend" && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        {tab === "commercial" && (
+          <div className="space-y-5">
+            <Card>
+              <CardHeader>
+                <CardTitle>Kenya — GGR by County</CardTitle>
+                <CardDescription>Interactive map (circle size = annual GGR)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <KenyaCountyMap
+                  metric="annual_ggr"
+                  data={(overview?.counties ?? []).map((row) => ({
+                    county: row.county,
+                    value: row.annual_ggr,
+                    operator_count: row.operator_count,
+                  }))}
+                />
+              </CardContent>
+            </Card>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>GGR by County</CardTitle>
+                  <CardDescription>Annual GGR (KES)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CountyBarChart data={ggrChartData ?? []} dataKey="annual_ggr" label="Annual GGR (KES)" color={GRA_NAVY} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>County Snapshot</CardTitle>
+                  <CardDescription>Top counties by GGR</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ul className="divide-y divide-border/50">
+                    {(overview?.counties ?? []).slice(0, 8).map((row) => (
+                      <li key={row.county}>
+                        <Link
+                          href={`/regional/${encodeURIComponent(row.county)}`}
+                          className="flex flex-col gap-2 px-5 py-3 text-sm hover:bg-secondary/40 transition-colors sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                            <span className="min-w-0 truncate font-medium">{row.county}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">
+                            {formatNumber(row.operator_count)} ops · {formatKsh(row.annual_ggr)}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {tab === "player_safety" && (
+          <div className="space-y-5">
+            <Card>
+              <CardHeader>
+                <CardTitle>Play Safe Activations by County</CardTitle>
+                <CardDescription>Kenya map (30 days)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <KenyaCountyMap
+                  metric="play_safe"
+                  data={(overview?.play_safe_by_county ?? []).map((row) => ({
+                    county: row.county,
+                    value: row.count,
+                  }))}
+                />
+              </CardContent>
+            </Card>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Play Safe Activations</CardTitle>
+                  <CardDescription>By county (30 days)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CountyBarChart data={overview?.play_safe_by_county ?? []} dataKey="count" label="Activations" color={GRA_GREEN} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Self-Exclusion Requests</CardTitle>
+                  <CardDescription>By county (30 days)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CountyBarChart data={overview?.self_exclusion_by_county ?? []} dataKey="count" label="Requests" color={GRA_RED} />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {tab === "behaviour" && (
           <Card>
-            <CardHeader
-              title="Stake Band Distribution"
-              description="Anonymised spend bands (KES)"
-            />
-            <StakeBandChart data={overview?.stake_band_distribution ?? []} />
+            <CardHeader>
+              <CardTitle>Peak Play Time</CardTitle>
+              <CardDescription>Session intensity heatmap (hour × day of week)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PeakTimeHeatmap
+                matrix={overview?.peak_time_heatmap.matrix ?? {}}
+                dayLabels={overview?.peak_time_heatmap.day_labels ?? []}
+              />
+            </CardContent>
           </Card>
-          <Card>
-            <CardHeader
-              title="Age Band Distribution"
-              description="Anonymised session age buckets"
-            />
-            <StakeBandChart
-              data={overview?.age_band_distribution ?? []}
-              color="#6B4C9A"
-            />
-          </Card>
-        </div>
-      )}
+        )}
+
+        {tab === "spend" && (
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Stake Band Distribution</CardTitle>
+                <CardDescription>Anonymised spend bands (KES)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StakeBandChart data={overview?.stake_band_distribution ?? []} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Age Band Distribution</CardTitle>
+                <CardDescription>Anonymised session age buckets</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StakeBandChart data={overview?.age_band_distribution ?? []} color={PURPLE} />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }

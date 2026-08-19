@@ -19,27 +19,28 @@ export function PaymentsNav() {
   return (
     <>
       <GatewayIntegrationBanner />
-      <nav className="mb-6 flex flex-wrap gap-2 overflow-x-auto [-webkit-overflow-scrolling:touch] pb-1">
-      {links.map((link) => {
-        const active = link.exact
-          ? pathname === link.href
-          : pathname === link.href || pathname.startsWith(`${link.href}/`);
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm transition-colors",
-              active
-                ? "bg-primary text-white"
-                : "bg-secondary text-muted hover:text-foreground",
-            )}
-          >
-            {link.label}
-          </Link>
-        );
-      })}
-    </nav>
+      <nav className="mb-5 flex min-w-0 gap-0 overflow-x-auto border-b border-border [-webkit-overflow-scrolling:touch]" aria-label="Payments navigation">
+        {links.map((link) => {
+          const active = link.exact
+            ? pathname === link.href
+            : pathname === link.href || pathname.startsWith(`${link.href}/`);
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={cn(
+                "relative shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors",
+                "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:transition-all",
+                active
+                  ? "text-primary after:bg-primary"
+                  : "text-muted-foreground hover:text-foreground after:bg-transparent hover:after:bg-border"
+              )}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
+      </nav>
     </>
   );
 }

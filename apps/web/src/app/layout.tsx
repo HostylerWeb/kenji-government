@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { BootReadyMarker } from "@/components/boot-ready-marker";
 import { BootRecoveryScript } from "@/components/boot-recovery-script";
+import { Toaster } from "@/components/toast";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -28,6 +29,7 @@ export default function RootLayout({
         <BootRecoveryScript />
         <BootReadyMarker />
         {children}
+        <Toaster />
       </body>
     </html>
   );

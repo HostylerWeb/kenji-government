@@ -1,8 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UserPlus, Settings2, KeyRound, Users, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Card } from "@/components/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
+import { Badge } from "@/components/badge";
+import { Button } from "@/components/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+  DialogBody,
+} from "@/components/dialog";
+import { toast } from "@/components/toast";
+import { PageHeader } from "@/components/page-header";
 import { TableScroll } from "@/components/table-scroll";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -48,7 +62,8 @@ export default function SettingsPage() {
     }>
   >([]);
   const [credentials, setCredentials] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [createUserLoading, setCreateUserLoading] = useState(false);
   const [showMfaSetup, setShowMfaSetup] = useState(false);
   const [securityPrefs, setSecurityPrefs] = useState<SecurityPreferences | null>(
     null,
@@ -82,6 +97,7 @@ export default function SettingsPage() {
   async function handleCreateUser(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!token) return;
+    setCreateUserLoading(true);
     const form = new FormData(e.currentTarget);
     try {
       await createUser(token, {
@@ -90,11 +106,14 @@ export default function SettingsPage() {
         full_name: String(form.get("full_name")),
         role: String(form.get("role")),
       });
-      setMessage("User created.");
+      toast.success("User created successfully.");
       setUsers(await getUsers(token));
-      e.currentTarget.reset();
+      setCreateUserOpen(false);
+      (e.target as HTMLFormElement).reset();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed to create user");
+    } finally {
+      setCreateUserLoading(false);
     }
   }
 
@@ -102,13 +121,14 @@ export default function SettingsPage() {
     if (!token) return;
     await updateUser(token, id, { is_active: !is_active });
     setUsers(await getUsers(token));
+    toast.success(is_active ? "User deactivated." : "User activated.");
   }
 
   async function changeRole(id: string, role: string) {
     if (!token) return;
     await updateUser(token, id, { role });
     setUsers(await getUsers(token));
-    setMessage("Role updated.");
+    toast.success("Role updated.");
   }
 
   async function handleSystemSettings(e: React.FormEvent<HTMLFormElement>) {
@@ -136,9 +156,9 @@ export default function SettingsPage() {
         },
       });
       setSystemSettings(updated);
-      setMessage("System settings updated.");
+      toast.success("System settings updated.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed to update settings");
+      toast.error(err instanceof Error ? err.message : "Failed to update settings");
     }
   }
 
@@ -146,23 +166,22 @@ export default function SettingsPage() {
     if (!token) return;
     try {
       const result = await generateApiCredential(token, siteId);
-      setCredentials(
-        `API Key: ${result.api_key}\nHMAC Secret: ${result.hmac_secret}`,
-      );
+      setCredentials(`API Key: ${result.api_key}\nHMAC Secret: ${result.hmac_secret}`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     }
   }
 
   async function handleRevokeCredential(siteId: string, credentialId: string) {
     if (!token) return;
-    if (!confirm("Revoke this API credential?")) return;
+    // use native confirm for now (Phase 8 will replace with Dialog)
+    if (!window.confirm("Revoke this API credential?")) return;
     try {
       await revokeApiCredential(token, siteId, credentialId);
-      setMessage("Credential revoked.");
+      toast.success("Credential revoked.");
       if (operatorId) setSites(await getOperatorSites(token, operatorId));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     }
   }
 
@@ -170,13 +189,30 @@ export default function SettingsPage() {
 
   return (
     <AppShell user={user} title="Settings">
-      {message && (
-        <p className="mb-4 rounded-lg bg-secondary px-4 py-3 text-sm">{message}</p>
-      )}
+      <div className="mb-5">
+        <PageHeader
+          title="Settings"
+          subtitle="Security, system configuration and staff user management"
+          breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Settings" }]}
+          action={
+            isAdmin ? (
+              <Button size="sm" leftIcon={<UserPlus className="h-4 w-4" />} onClick={() => setCreateUserOpen(true)}>
+                Create User
+              </Button>
+            ) : undefined
+          }
+        />
+      </div>
 
       <Card className="mb-6">
-        <h2 className="mb-2 text-base font-semibold">Sign-in security</h2>
-        <p className="mb-4 text-sm text-muted">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            Sign-in Security
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
           Optional layers you can turn on for your account.
         </p>
 
@@ -200,9 +236,9 @@ export default function SettingsPage() {
                     await disableMfa(token);
                     const prefs = await getSecurityPreferences(token);
                     setSecurityPrefs(prefs);
-                    setMessage("Google Authenticator disabled.");
+                    toast.success("Google Authenticator disabled.");
                   } catch (err) {
-                    setMessage(err instanceof Error ? err.message : "Failed");
+                    toast.error(err instanceof Error ? err.message : "Failed");
                   }
                 }}
                 className="mt-1"
@@ -236,9 +272,9 @@ export default function SettingsPage() {
                       email_otp_new_device_enabled: e.target.checked,
                     });
                     setSecurityPrefs(prefs);
-                    setMessage("Email verification preference updated.");
+                    toast.success("Email verification preference updated.");
                   } catch (err) {
-                    setMessage(err instanceof Error ? err.message : "Failed");
+                    toast.error(err instanceof Error ? err.message : "Failed");
                   }
                 }}
                 className="mt-1"
@@ -271,19 +307,22 @@ export default function SettingsPage() {
                 storeAuth(response);
                 setShowMfaSetup(false);
                 getSecurityPreferences(token!).then(setSecurityPrefs);
-                setMessage("Google Authenticator enabled.");
+                toast.success("Google Authenticator enabled.");
               }}
-              onError={(err) => setMessage(err)}
+              onError={(err) => toast.error(err)}
             />
           </div>
         )}
+        </CardContent>
       </Card>
 
       {credentials && (
         <Card className="mb-6">
-          <h2 className="mb-2 font-semibold">New API Credentials</h2>
-          <pre className="overflow-x-auto rounded-lg bg-secondary p-3 text-xs break-all">{credentials}</pre>
-          <p className="mt-2 text-xs text-danger">Store securely — shown once only.</p>
+          <CardHeader><CardTitle className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-primary" />New API Credentials</CardTitle></CardHeader>
+          <CardContent>
+            <pre className="overflow-x-auto rounded-lg bg-secondary p-3 text-xs break-all">{credentials}</pre>
+            <p className="mt-2 text-xs text-danger">Store securely — shown once only.</p>
+          </CardContent>
         </Card>
       )}
 
@@ -394,117 +433,133 @@ export default function SettingsPage() {
           )}
 
           <Card className="mb-6">
-            <h2 className="mb-4 text-base font-semibold">Staff Users</h2>
-            <TableScroll>
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-border text-muted">
-                <tr>
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Email</th>
-                  <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2">{u.full_name}</td>
-                    <td className="px-3 py-2">{u.email}</td>
-                    <td className="px-3 py-2">
-                      <select
-                        value={u.role}
-                        onChange={(e) => changeRole(u.id, e.target.value)}
-                        className="rounded border border-border px-2 py-1 text-xs capitalize"
-                        disabled={
-                          u.id === user.id ||
-                          (u.role === "super_admin" && !isSuperAdmin)
-                        }
-                      >
-                        {(u.role === "super_admin" || u.role === "admin"
-                          ? ALL_ROLES
-                          : assignableRoles).map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2">{u.is_active ? "Active" : "Inactive"}</td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => toggleUser(u.id, u.is_active)}
-                        className="text-xs text-primary hover:underline"
-                        disabled={
-                          u.id === user.id ||
-                          (u.role === "super_admin" && !isSuperAdmin)
-                        }
-                      >
-                        {u.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    </td>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Staff Users</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <TableScroll>
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-border bg-secondary/50">
+                  <tr>
+                    {["Name", "Email", "Role", "Status", "Actions"].map((h) => (
+                      <th key={h} className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            </TableScroll>
-          </Card>
-
-          <Card className="mb-6">
-            <h2 className="mb-4 text-base font-semibold">Create User</h2>
-            <form onSubmit={handleCreateUser} className="grid gap-3 sm:grid-cols-2">
-              <input name="full_name" placeholder="Full name" required className="rounded-lg border border-border px-3 py-2 text-sm" />
-              <input name="email" type="email" placeholder="Email" required className="rounded-lg border border-border px-3 py-2 text-sm" />
-              <input name="password" type="password" placeholder="Password" required className="rounded-lg border border-border px-3 py-2 text-sm" />
-              <select name="role" className="rounded-lg border border-border px-3 py-2 text-sm capitalize">
-                {assignableRoles.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-              <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm text-white sm:col-span-2">
-                Create User
-              </button>
-            </form>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/30">
+                      <td className="px-5 py-3.5 font-medium">{u.full_name}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
+                      <td className="px-5 py-3.5">
+                        <select
+                          value={u.role}
+                          onChange={(e) => changeRole(u.id, e.target.value)}
+                          className="rounded border border-border bg-background px-2 py-1 text-xs capitalize"
+                          disabled={u.id === user.id || (u.role === "super_admin" && !isSuperAdmin)}
+                        >
+                          {(u.role === "super_admin" || u.role === "admin" ? ALL_ROLES : assignableRoles).map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={u.is_active ? "success" : "muted"} dot>
+                          {u.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button
+                          onClick={() => toggleUser(u.id, u.is_active)}
+                          className="text-xs text-primary hover:underline disabled:opacity-50"
+                          disabled={u.id === user.id || (u.role === "super_admin" && !isSuperAdmin)}
+                        >
+                          {u.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </TableScroll>
+            </CardContent>
           </Card>
 
           <Card>
-            <h2 className="mb-4 text-base font-semibold">Operator API Credentials</h2>
-            <OperatorSelect token={token!} onSelect={setOperatorId} />
-            {sites.map((site) => (
-              <div key={site.id} className="mb-4 rounded-lg border border-border p-3">
-                <p className="font-medium">{site.domain}</p>
-                <ul className="mt-2 space-y-1 text-xs text-muted">
-                  {site.api_credentials.map((cred) => (
-                    <li key={cred.id} className="flex items-center justify-between gap-2">
-                      <span>
-                        {cred.api_key_prefix}… — {cred.is_active ? "active" : "revoked"}
-                      </span>
-                      {cred.is_active && (
-                        <button
-                          onClick={() => handleRevokeCredential(site.id, cred.id)}
-                          className="text-danger hover:underline"
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => handleGenerateCredential(site.id)}
-                  className="mt-2 text-sm text-primary hover:underline"
-                >
-                  Generate new credential
-                </button>
-              </div>
-            ))}
+            <CardHeader><CardTitle className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-primary" />Operator API Credentials</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <OperatorSelect token={token!} onSelect={setOperatorId} />
+              {sites.map((site) => (
+                <div key={site.id} className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="font-medium text-sm">{site.domain}</p>
+                  <ul className="space-y-1">
+                    {site.api_credentials.map((cred) => (
+                      <li key={cred.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono text-muted-foreground">{cred.api_key_prefix}… — {cred.is_active ? "active" : "revoked"}</span>
+                        {cred.is_active && (
+                          <button onClick={() => handleRevokeCredential(site.id, cred.id)} className="text-danger hover:underline">Revoke</button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <button onClick={() => handleGenerateCredential(site.id)} className="text-sm text-primary hover:underline">
+                    Generate new credential
+                  </button>
+                </div>
+              ))}
+            </CardContent>
           </Card>
         </>
       ) : (
         <Card>
-          <p className="text-sm text-muted">
-            Settings are available to GRA administrators only.
-          </p>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Settings are available to GRA administrators only.</p>
+          </CardContent>
         </Card>
       )}
+
+      {/* ── Create User Dialog ──────────────────────────── */}
+      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Staff User</DialogTitle>
+          </DialogHeader>
+          <form id="create-user-form" onSubmit={handleCreateUser}>
+            <DialogBody className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Full name</label>
+                <input name="full_name" placeholder="Jane Doe" required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Email</label>
+                <input name="email" type="email" placeholder="jane@gra.go.ke" required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Password</label>
+                <input name="password" type="password" required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Role</label>
+                <select name="role" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm capitalize outline-none focus:border-primary">
+                  {assignableRoles.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" size="sm" type="button">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" form="create-user-form" size="sm" loading={createUserLoading}>
+                Create User
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

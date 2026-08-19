@@ -16,25 +16,57 @@ import {
   ClipboardList,
   Scale,
   FileBarChart,
+  Bell,
+  ChevronRight,
+  User,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@kenji-government/shared";
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/auth";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/operators", label: "Operators", icon: Building2 },
-  { href: "/submissions", label: "Submissions", icon: FileText },
-  { href: "/compliance", label: "Compliance", icon: Scale },
-  { href: "/reports", label: "Reports", icon: FileBarChart },
-  { href: "/enforcement", label: "Enforcement", icon: Shield },
-  { href: "/audit", label: "Audit Log", icon: ClipboardList },
-  { href: "/regional", label: "Regional & Player Safety", icon: MapPin },
-  { href: "/payments", label: "Payments & AML", icon: CreditCard },
-  { href: "/settings", label: "Settings", icon: Settings },
+// ─── Nav config ──────────────────────────────────────────────
+const navGroups = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Compliance",
+    items: [
+      { href: "/operators", label: "Operators", icon: Building2 },
+      { href: "/submissions", label: "Submissions", icon: FileText },
+      { href: "/compliance", label: "Compliance", icon: Scale },
+      { href: "/enforcement", label: "Enforcement", icon: Shield },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/reports", label: "Reports", icon: FileBarChart },
+      { href: "/regional", label: "Regional & Safety", icon: MapPin },
+      { href: "/payments", label: "Payments & AML", icon: CreditCard },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/audit", label: "Audit Log", icon: ClipboardList },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
+const roleLabels: Record<string, string> = {
+  admin: "Administrator",
+  super_user: "Super User",
+  viewer: "Viewer",
+  analyst: "Analyst",
+};
+
+// ─── Component ───────────────────────────────────────────────
 export function AppShell({
   user,
   children,
@@ -58,67 +90,110 @@ export function AppShell({
     };
   }, [mobileOpen]);
 
+  // Close sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   function logout() {
     clearAuth();
     window.location.href = "/login";
   }
 
+  const initials = user.full_name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Kenya stripe */}
       <div className="kenya-stripe fixed left-0 right-0 top-0 z-50" />
 
-      <div className="flex min-w-0 pt-1">
+      <div className="flex min-w-0 pt-[3px]">
+        {/* ── Sidebar ─────────────────────────────────────── */}
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-64 min-h-screen flex-col border-r border-border bg-gra-navy text-white transition-transform lg:translate-x-0",
-            mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex flex-col border-r",
+            "transition-transform duration-200 ease-out",
+            "bg-sidebar text-sidebar-foreground border-sidebar-border",
+            "w-[var(--sidebar-width)]",
+            mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           )}
+          aria-label="Sidebar navigation"
         >
-          <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-4 sm:px-6">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gra-green font-bold">
+          {/* Logo */}
+          <div className="flex h-[var(--header-height)] shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gra-green text-xs font-bold text-white">
               GRA
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">GRA Oversight</p>
-              <p className="truncate text-xs text-white/70">Raffle Console</p>
+              <p className="truncate text-sm font-semibold leading-tight">GRA Console</p>
+              <p className="truncate text-[11px] text-sidebar-muted">Raffle Oversight</p>
             </div>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto p-4 [-webkit-overflow-scrolling:touch]">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
+          {/* Nav groups */}
+          <nav
+            className="flex-1 overflow-y-auto py-3 [-webkit-overflow-scrolling:touch]"
+            aria-label="Main navigation"
+          >
+            {navGroups.map((group) => (
+              <div key={group.label} className="mb-4">
+                <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted opacity-70">
+                  {group.label}
+                </p>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                    active
-                      ? "bg-white/15 text-white"
-                      : "text-white/80 hover:bg-white/10 hover:text-white",
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              );
-            })}
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "group mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                      )}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {active && (
+                        <span className="absolute left-0 h-5 w-0.5 rounded-r-full bg-gra-green" aria-hidden="true" />
+                      )}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
-          <div className="shrink-0 border-t border-white/10 p-4">
-            <div className="mb-3 px-2">
-              <p className="truncate text-sm font-medium">{user.full_name}</p>
-              <p className="truncate text-xs text-white/70">{user.email}</p>
-              <p className="mt-1 text-xs capitalize text-white/50">{user.role}</p>
+          {/* Bottom dock */}
+          <div className="shrink-0 border-t border-sidebar-border p-3">
+            <div className="mb-2 flex items-center gap-3 rounded-lg px-2 py-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium leading-tight">
+                  {user.full_name}
+                </p>
+                <p className="truncate text-[11px] text-sidebar-muted">
+                  {roleLabels[user.role] ?? user.role}
+                </p>
+              </div>
             </div>
             <button
               type="button"
               onClick={logout}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
             >
               <LogOut className="h-4 w-4 shrink-0" />
               Sign out
@@ -126,64 +201,90 @@ export function AppShell({
           </div>
         </aside>
 
+        {/* Mobile overlay */}
         {mobileOpen && (
           <div
-            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
         )}
 
-        <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-64">
-          <header className="sticky top-1 z-20 border-b border-border bg-white/95 backdrop-blur">
-            <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:h-16 sm:gap-4 sm:px-4 lg:px-8">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        {/* ── Main column ──────────────────────────────────── */}
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-[var(--sidebar-width)]">
+          {/* Header */}
+          <header className="sticky top-[3px] z-20 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+            <div className="flex h-[var(--header-height)] min-w-0 items-center gap-2 px-3 sm:gap-4 sm:px-6">
+              {/* Hamburger */}
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+                onClick={() => setMobileOpen(!mobileOpen)}
+                aria-label="Toggle menu"
+                aria-expanded={mobileOpen}
+              >
+                {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </button>
+
+              {/* Breadcrumbs + title */}
+              <div className="min-w-0 flex-1">
+                {breadcrumbs && breadcrumbs.length > 0 && (
+                  <nav className="flex items-center gap-1 text-xs text-muted-foreground" aria-label="Breadcrumb">
+                    {breadcrumbs.slice(0, 3).map((crumb, i) => (
+                      <span key={i} className="flex min-w-0 items-center gap-1">
+                        {i > 0 && (
+                          <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
+                        )}
+                        {crumb.href ? (
+                          <Link
+                            href={crumb.href}
+                            className="truncate max-w-[100px] hover:text-foreground transition-colors"
+                          >
+                            {crumb.label}
+                          </Link>
+                        ) : (
+                          <span className="truncate max-w-[140px] text-foreground font-medium">
+                            {crumb.label}
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </nav>
+                )}
+                <h1 className="truncate text-base font-semibold text-foreground sm:text-lg leading-tight">
+                  {title}
+                </h1>
+              </div>
+
+              {/* Right side */}
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg p-2 hover:bg-secondary lg:hidden"
-                  onClick={() => setMobileOpen(!mobileOpen)}
-                  aria-label="Toggle menu"
-                  aria-expanded={mobileOpen}
+                  className="relative rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                  aria-label="Notifications"
+                  title="Notifications (coming soon)"
                 >
-                  {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                  <Bell className="h-4 w-4" />
                 </button>
-                <div className="min-w-0">
-                  {breadcrumbs && breadcrumbs.length > 0 ? (
-                    <div
-                      className="flex min-w-0 items-center gap-1 text-xs text-muted sm:gap-2 sm:text-sm"
-                    >
-                      {breadcrumbs.map((crumb, i) => (
-                        <span
-                          key={`${crumb.label}-${i}`}
-                          className="flex min-w-0 items-center gap-1 sm:gap-2"
-                        >
-                          {i > 0 && <span className="shrink-0">/</span>}
-                          {crumb.href ? (
-                            <Link
-                              href={crumb.href}
-                              className="truncate hover:text-foreground"
-                            >
-                              {crumb.label}
-                            </Link>
-                          ) : (
-                            <span className="truncate text-foreground">{crumb.label}</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
-                    {title}
-                  </h1>
+                <div className="hidden items-center gap-2 lg:flex">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-subtle text-primary text-xs font-semibold">
+                    {initials}
+                  </div>
+                  <div className="hidden xl:block text-right">
+                    <p className="text-xs font-medium leading-tight text-foreground">{user.full_name}</p>
+                    <p className="text-[10px] text-muted-foreground">{roleLabels[user.role] ?? user.role}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="hidden shrink-0 text-sm text-muted lg:block">
-                Gambling Regulatory Authority — Kenya
               </div>
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 p-3 sm:p-4 lg:p-8">{children}</main>
+          {/* Page content */}
+          <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto max-w-screen-2xl w-full">
+              {children}
+            </div>
+          </main>
         </div>
       </div>
     </div>

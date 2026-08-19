@@ -3,9 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { FileText, Clock, AlertTriangle, CheckCircle } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/badge";
-import { Card } from "@/components/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
+import { Button } from "@/components/button";
+import { EmptyState } from "@/components/empty-state";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogFooter,
+  DialogClose,
+} from "@/components/dialog";
+import { toast } from "@/components/toast";
 import { useAuth } from "@/lib/use-auth";
 import {
   getEnforcementCase,
@@ -13,15 +27,36 @@ import {
   type EnforcementCase,
 } from "@/lib/api";
 
+type ActionType = "notice" | "warning" | "fine" | "suspension";
+
+const ACTION_LABELS: Record<ActionType, string> = {
+  notice: "Issue Notice",
+  warning: "Issue Warning",
+  fine: "Impose Fine",
+  suspension: "Suspend Operator",
+};
+
+const ACTION_VARIANTS: Record<ActionType, "outline" | "warning" | "outline_" | "danger"> = {
+  notice: "outline",
+  warning: "warning",
+  fine: "outline",
+  suspension: "danger",
+};
+
 export default function EnforcementCaseDetailPage() {
   const params = useParams();
   const caseId = params.caseId as string;
   const { user, token } = useAuth();
   const [caseRecord, setCaseRecord] = useState<
-    EnforcementCase & { operator?: { external_id: string; trading_name: string } }
-  | null>(null);
+    (EnforcementCase & { operator?: { external_id: string; trading_name: string } }) | null
+  >(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+
+  // Action dialog
+  const [activeAction, setActiveAction] = useState<ActionType | null>(null);
+  const [actionDetails, setActionDetails] = useState("");
+  const [fineAmount, setFineAmount] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   const canAct = user?.role === "admin" || user?.role === "supervisor";
 
@@ -32,22 +67,22 @@ export default function EnforcementCaseDetailPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load case"));
   }, [token, caseId]);
 
-  async function handleAddAction(
-    action_type: string,
-    details?: string,
-    fine_amount?: number,
-  ) {
-    if (!token) return;
+  async function submitAction() {
+    if (!token || !activeAction) return;
+    setActionLoading(true);
     try {
       await addEnforcementAction(token, caseId, {
-        action_type,
-        details,
-        fine_amount,
+        action_type: activeAction,
+        details: actionDetails || undefined,
+        fine_amount: activeAction === "fine" && fineAmount ? Number(fineAmount) : undefined,
       });
-      setMessage("Action recorded.");
+      toast.success(`${ACTION_LABELS[activeAction]} recorded.`);
       setCaseRecord(await getEnforcementCase(token, caseId));
+      setActiveAction(null);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to add action");
+      toast.error(e instanceof Error ? e.message : "Failed to add action");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -63,114 +98,133 @@ export default function EnforcementCaseDetailPage() {
         { label: caseRecord?.case_number ?? caseId },
       ]}
     >
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-danger">{error}</p>
-      )}
-      {message && (
-        <p className="mb-4 rounded-lg bg-secondary px-4 py-3 text-sm">{message}</p>
-      )}
+      <div className="space-y-5">
+        {error && (
+          <div className="rounded-lg bg-danger-subtle border border-danger/30 px-4 py-3 text-sm text-danger">{error}</div>
+        )}
 
-      {caseRecord && (
-        <>
-          <div className="mb-6 flex flex-wrap gap-2">
-            <Badge variant="muted">{caseRecord.status}</Badge>
-            <Badge variant="warning">{caseRecord.case_type}</Badge>
-            <span className="font-mono text-xs text-muted">{caseRecord.case_number}</span>
-          </div>
+        {caseRecord && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs bg-secondary px-2 py-0.5 rounded text-muted-foreground">{caseRecord.case_number}</span>
+              <Badge variant="muted">{caseRecord.status}</Badge>
+              <Badge variant="warning">{caseRecord.case_type}</Badge>
+              {caseRecord.operator && (
+                <Link href={`/operators/${caseRecord.operator.external_id}`} className="text-sm text-primary hover:underline ml-2">
+                  {caseRecord.operator.trading_name}
+                </Link>
+              )}
+            </div>
 
-          {caseRecord.operator && (
-            <Link
-              href={`/operators/${caseRecord.operator.external_id}`}
-              className="mb-4 block text-sm text-primary hover:underline"
-            >
-              {caseRecord.operator.trading_name}
-            </Link>
-          )}
-
-          {caseRecord.description && (
-            <Card className="mb-6">
-              <p className="text-sm text-muted">{caseRecord.description}</p>
-            </Card>
-          )}
-
-          {canAct && (
-            <Card className="mb-6">
-              <h2 className="mb-4 text-base font-semibold">Add Enforcement Action</h2>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => {
-                    const d = prompt("Notice details:");
-                    if (d) handleAddAction("notice", d);
-                  }}
-                  className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary"
-                >
-                  Issue Notice
-                </button>
-                <button
-                  onClick={() => {
-                    const d = prompt("Warning details:");
-                    if (d) handleAddAction("warning", d);
-                  }}
-                  className="rounded-lg border border-warning px-3 py-2 text-sm text-warning hover:bg-amber-50"
-                >
-                  Issue Warning
-                </button>
-                <button
-                  onClick={() => {
-                    const amount = prompt("Fine amount (Ksh):");
-                    const d = prompt("Fine details:");
-                    if (amount && d) handleAddAction("fine", d, Number(amount));
-                  }}
-                  className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary"
-                >
-                  Impose Fine
-                </button>
-                <button
-                  onClick={() => {
-                    const d = prompt("Suspension reason:");
-                    if (d && confirm("Confirm suspension action?"))
-                      handleAddAction("suspension", d);
-                  }}
-                  className="rounded-lg border border-danger px-3 py-2 text-sm text-danger hover:bg-red-50"
-                >
-                  Suspend Operator
-                </button>
-              </div>
-            </Card>
-          )}
-
-          <Card>
-            <h2 className="mb-4 text-base font-semibold">Case Timeline</h2>
-            {caseRecord.actions && caseRecord.actions.length > 0 ? (
-              <ul className="space-y-3">
-                {caseRecord.actions.map((action) => (
-                  <li
-                    key={action.id}
-                    className="rounded-lg border border-border p-3 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="muted">{action.action_type}</Badge>
-                      <span className="text-xs text-muted">
-                        {new Date(action.created_at).toLocaleString("en-KE")}
-                      </span>
-                      {action.performer && (
-                        <span className="text-xs text-muted">
-                          — {action.performer.full_name}
-                        </span>
-                      )}
-                    </div>
-                    {action.details && (
-                      <p className="mt-2 text-muted">{action.details}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted">No actions recorded yet.</p>
+            {caseRecord.description && (
+              <Card variant="flat">
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{caseRecord.description}</p>
+                </CardContent>
+              </Card>
             )}
-          </Card>
-        </>
-      )}
+
+            {canAct && (
+              <Card>
+                <CardHeader><CardTitle>Add Enforcement Action</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { setActionDetails(""); setActiveAction("notice"); }}>Issue Notice</Button>
+                    <Button variant="warning" size="sm" onClick={() => { setActionDetails(""); setActiveAction("warning"); }}>Issue Warning</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setActionDetails(""); setFineAmount(""); setActiveAction("fine"); }}>Impose Fine</Button>
+                    <Button variant="danger" size="sm" onClick={() => { setActionDetails(""); setActiveAction("suspension"); }}>Suspend Operator</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="h-4 w-4 text-primary" />Case Timeline</CardTitle></CardHeader>
+              <CardContent>
+                {caseRecord.actions && caseRecord.actions.length > 0 ? (
+                  <ul className="space-y-3">
+                    {caseRecord.actions.map((action) => (
+                      <li key={action.id} className="rounded-lg border border-border bg-secondary/20 p-3.5 text-sm space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="muted" size="sm">{action.action_type}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(action.created_at).toLocaleString("en-KE")}
+                          </span>
+                          {action.performer && (
+                            <span className="text-xs text-muted-foreground">— {action.performer.full_name}</span>
+                          )}
+                        </div>
+                        {action.details && (
+                          <p className="text-muted-foreground text-sm leading-relaxed">{action.details}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyState
+                    icon={<FileText className="h-5 w-5" />}
+                    title="No actions recorded"
+                    description="Use the action buttons above to record enforcement steps."
+                    className="py-8"
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
+      {/* Action Dialog */}
+      <Dialog open={!!activeAction} onOpenChange={(open) => !open && setActiveAction(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{activeAction ? ACTION_LABELS[activeAction] : ""}</DialogTitle>
+            <DialogDescription>
+              This action will be recorded in the case timeline.
+              {activeAction === "suspension" && " This will immediately suspend the operator's operations."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            {activeAction === "fine" && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Fine Amount (KES)</label>
+                <input
+                  type="number"
+                  value={fineAmount}
+                  onChange={(e) => setFineAmount(e.target.value)}
+                  placeholder="e.g. 50000"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </div>
+            )}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Details <span className="text-muted-foreground font-normal">{activeAction === "fine" ? "(optional)" : "(required)"}</span>
+              </label>
+              <textarea
+                rows={3}
+                value={actionDetails}
+                onChange={(e) => setActionDetails(e.target.value)}
+                placeholder="Describe the enforcement action…"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none resize-none focus:border-primary"
+              />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant={activeAction === "suspension" ? "danger" : activeAction === "warning" ? "warning" : "primary"}
+              size="sm"
+              loading={actionLoading}
+              onClick={submitAction}
+            >
+              {activeAction ? ACTION_LABELS[activeAction] : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
