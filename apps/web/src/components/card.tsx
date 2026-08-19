@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const cardVariants = {
-  default: "bg-card shadow-card border border-border",
+  default: "bg-card shadow-sm border border-border",
   elevated: "bg-card shadow-card-hover border border-border",
   flat: "bg-secondary border border-border",
   tinted: "bg-primary-subtle border border-primary/20",

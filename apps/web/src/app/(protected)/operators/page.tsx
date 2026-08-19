@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Download, Building2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Search, Building2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge, complianceBadgeVariant, complianceLabel } from "@/components/badge";
 import { Card, CardContent } from "@/components/card";
@@ -10,7 +11,6 @@ import { Tabs } from "@/components/tabs";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonTable } from "@/components/skeleton";
-import { Button } from "@/components/button";
 import { getDashboardStats, getOperators, type OperatorListItem } from "@/lib/api";
 import { useAuth } from "@/lib/use-auth";
 import { formatKsh } from "@/lib/utils";
@@ -25,12 +25,18 @@ const COMPLIANCE_TABS: Array<{ id: ComplianceTab; label: string }> = [
 
 export default function OperatorsPage() {
   const { user, token } = useAuth();
+  const searchParams = useSearchParams();
   const [operators, setOperators] = useState<OperatorListItem[]>([]);
   const [complianceTab, setComplianceTab] = useState<ComplianceTab>("compliant");
   const [counts, setCounts] = useState({ compliant: 0, at_risk: 0, non_compliant: 0 });
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q != null) setSearch(q);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!token) return;

@@ -8,28 +8,28 @@
 :root {
   color-scheme: light;
 
-  /* GRA Brand */
-  --color-gra-green: 152 100% 21%;      /* #006B3F */
+  /* GRA / Kenya brand — matched to approved prototype */
+  --color-gra-green: 151 100% 32%;      /* #00A551 */
   --color-gra-navy: 214 54% 23%;        /* #1A365D */
-  --color-gra-red: 3 81% 40%;           /* #BB1E10 */
+  --color-gra-red: 357 62% 47%;         /* #C12D31 */
 
   /* Surfaces */
-  --color-background: 210 40% 98%;      /* #F8FAFC */
-  --color-foreground: 222 47% 11%;      /* #0F172A */
-  --color-card: 0 0% 100%;             /* #FFFFFF */
-  --color-card-foreground: 222 47% 11%;
+  --color-background: 0 0% 99%;         /* #FCFCFC */
+  --color-foreground: 0 0% 7%;          /* #121212 */
+  --color-card: 0 0% 100%;
+  --color-card-foreground: 0 0% 7%;
   --color-border: 214 32% 91%;          /* #E2E8F0 */
   --color-input: 214 32% 91%;
-  --color-ring: 152 100% 21%;
+  --color-ring: 151 100% 32%;
 
   /* Muted */
-  --color-muted: 215 16% 47%;           /* #64748B */
-  --color-muted-foreground: 215 16% 47%;
+  --color-muted: 0 0% 95%;              /* #F2F2F2 — fills */
+  --color-muted-foreground: 0 0% 33%;   /* #555 — labels */
 
-  /* Primary = GRA green */
-  --color-primary: 152 100% 21%;
+  /* Primary = Kenya green from prototype */
+  --color-primary: 151 100% 32%;
   --color-primary-foreground: 0 0% 100%;
-  --color-primary-subtle: 152 60% 95%;
+  --color-primary-subtle: 151 70% 94%;
 
   /* Secondary */
   --color-secondary: 210 40% 96%;       /* #F1F5F9 */
@@ -40,7 +40,7 @@
   --color-accent-foreground: 222 47% 11%;
 
   /* Destructive */
-  --color-destructive: 0 72% 51%;       /* #DC2626 */
+  --color-destructive: 357 68% 42%;     /* #B32228 */
   --color-destructive-foreground: 0 0% 100%;
 
   /* Status */
@@ -56,18 +56,18 @@
   --color-danger-foreground: 0 0% 100%;
   --color-danger-subtle: 0 86% 97%;
 
-  /* Sidebar */
-  --color-sidebar: 214 54% 23%;
-  --color-sidebar-foreground: 0 0% 100%;
-  --color-sidebar-border: 214 40% 30%;
-  --color-sidebar-accent: 214 40% 32%;
-  --color-sidebar-accent-foreground: 0 0% 100%;
-  --color-sidebar-muted: 214 30% 60%;
+  /* Sidebar — light government console (prototype) */
+  --color-sidebar: 0 0% 100%;
+  --color-sidebar-foreground: 0 0% 7%;
+  --color-sidebar-border: 214 32% 91%;
+  --color-sidebar-accent: 151 70% 94%;
+  --color-sidebar-accent-foreground: 151 100% 28%;
+  --color-sidebar-muted: 215 16% 47%;
 
   /* Geometry */
   --sidebar-width: 260px;
-  --header-height: 60px;
-  --radius: 0.625rem;
+  --header-height: 56px;
+  --radius: 0.5rem;
 }
 
 /* ─── Base reset ────────────────────────────────────────────── */
@@ -99,6 +99,11 @@ h1, h2, h3, h4, h5, h6 {
   @apply font-semibold tracking-tight;
 }
 
+/* Prototype used text-muted as label colour; token DEFAULT is a fill. */
+.text-muted {
+  color: hsl(var(--color-muted-foreground));
+}
+
 /* ─── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
@@ -121,14 +126,15 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ─── Kenya stripe ──────────────────────────────────────────── */
-.kenya-stripe {
+.kenya-stripe,
+.kenya-flag-bar {
   background: linear-gradient(
     to right,
-    #000 0% 33.33%,
-    #bb1e10 33.33% 66.66%,
-    #006b3f 66.66% 100%
+    #202020 0% 33.33%,
+    #c12d31 33.33% 66.66%,
+    #00a551 66.66% 100%
   );
-  height: 3px;
+  height: 8px;
 }
 
 /* ─── Skeleton shimmer ──────────────────────────────────────── */
