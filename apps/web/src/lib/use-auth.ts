@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthUser } from "@kenji-government/shared";
-import { getStoredAuth } from "@/lib/auth";
+import { clearAuth, getStoredAuth } from "@/lib/auth";
 
 export function useAuth() {
   const router = useRouter();
@@ -12,14 +12,49 @@ export function useAuth() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const auth = getStoredAuth();
-    if (!auth) {
-      router.replace("/login");
-      return;
+    let cancelled = false;
+    let hardRedirectTimer: number | undefined;
+
+    try {
+      const auth = getStoredAuth();
+      if (!auth) {
+        if (!cancelled) {
+          setUser(null);
+          setToken(null);
+          setReady(true);
+        }
+        router.replace("/login");
+        // Soft navigate can stall; force a hard redirect as fallback.
+        hardRedirectTimer = window.setTimeout(() => {
+          if (window.location.pathname !== "/login") {
+            window.location.replace("/login");
+          }
+        }, 2000);
+        return () => {
+          cancelled = true;
+          if (hardRedirectTimer) window.clearTimeout(hardRedirectTimer);
+        };
+      }
+
+      if (!cancelled) {
+        setUser(auth.user);
+        setToken(auth.access_token);
+        setReady(true);
+      }
+    } catch {
+      clearAuth();
+      if (!cancelled) {
+        setUser(null);
+        setToken(null);
+        setReady(true);
+      }
+      window.location.replace("/login");
     }
-    setUser(auth.user);
-    setToken(auth.access_token);
-    setReady(true);
+
+    return () => {
+      cancelled = true;
+      if (hardRedirectTimer) window.clearTimeout(hardRedirectTimer);
+    };
   }, [router]);
 
   return { user, token, ready };
