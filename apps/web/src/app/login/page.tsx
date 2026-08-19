@@ -124,7 +124,6 @@ export default function LoginPage() {
       <div className="z-10 w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/gra-crest.png" alt="GRA crest" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">

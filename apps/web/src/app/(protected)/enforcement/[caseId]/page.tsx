@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FileText, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import { FileText, Clock } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
@@ -34,13 +34,6 @@ const ACTION_LABELS: Record<ActionType, string> = {
   warning: "Issue Warning",
   fine: "Impose Fine",
   suspension: "Suspend Operator",
-};
-
-const ACTION_VARIANTS: Record<ActionType, "outline" | "warning" | "outline_" | "danger"> = {
-  notice: "outline",
-  warning: "warning",
-  fine: "outline",
-  suspension: "danger",
 };
 
 export default function EnforcementCaseDetailPage() {

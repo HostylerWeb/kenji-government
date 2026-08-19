@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, Settings2, KeyRound, Users, ShieldCheck } from "lucide-react";
+import { UserPlus, KeyRound, Users, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
 import { Badge } from "@/components/badge";

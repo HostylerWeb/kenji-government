@@ -8,7 +8,7 @@ import { Badge, complianceBadgeVariant, complianceLabel } from "@/components/bad
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
 import { StatCard } from "@/components/stat-card";
 import { EmptyState } from "@/components/empty-state";
-import { SkeletonCard, SkeletonTable } from "@/components/skeleton";
+import { SkeletonCard } from "@/components/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { useAuth } from "@/lib/use-auth";
 import { getComplianceOverview, type ComplianceOverview } from "@/lib/api";

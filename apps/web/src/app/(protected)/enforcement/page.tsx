@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Shield, Clock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { Shield, Clock } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/badge";
 import { Card, CardContent } from "@/components/card";
