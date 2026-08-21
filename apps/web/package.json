@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bash ../../scripts/dev-web.sh",
+    "dev:clean": "CLEAN_NEXT=1 bash ../../scripts/dev-web.sh",
     "dev:fast": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",

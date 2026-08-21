@@ -1,9 +1,14 @@
 import type {
   AuthResponse,
+  AuthUser,
+  CreateEnforcementCaseInput,
   LoginResponse,
   MfaSetupResponse,
+  NotificationsResponse,
   SecurityPreferences,
+  UpdateProfileInput,
 } from "@kenji-government/shared";
+import { forceLogout } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -16,11 +21,18 @@ export class ApiError extends Error {
   }
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
+async function parseResponse<T>(
+  response: Response,
+  options?: { authenticated?: boolean },
+): Promise<T> {
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
+    if (response.status === 401 && options?.authenticated) {
+      forceLogout("expired");
+    }
+
     const message =
       data?.message ?? data?.error ?? `Request failed (${response.status})`;
     throw new ApiError(
@@ -49,7 +61,9 @@ export async function apiRequest<T>(
     cache: "no-store",
   });
 
-  return parseResponse<T>(response);
+  return parseResponse<T>(response, {
+    authenticated: Boolean(options.token),
+  });
 }
 
 export async function loginRequest(
@@ -141,7 +155,27 @@ export async function updateSecurityPreferences(
   });
 }
 
-export type { MfaSetupResponse, SecurityPreferences };
+export async function getProfile(token: string) {
+  return apiRequest<AuthUser>("/auth/me", { token });
+}
+
+export async function updateProfile(token: string, input: UpdateProfileInput) {
+  return apiRequest<AuthUser>("/auth/profile", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function logoutRequest(token: string) {
+  return apiRequest<{ success: boolean }>("/auth/logout", {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export type { MfaSetupResponse, SecurityPreferences, UpdateProfileInput };
 
 export interface DashboardStats {
   total_active_operators: number;
@@ -178,6 +212,8 @@ export interface OperatorListItem {
   tax_paid: string | null;
   tax_due: string | null;
   monthly_tickets: number | null;
+  open_cases_count?: number;
+  warnings_count?: number;
   licences?: LicenceItem[];
   operator_sites?: Array<{ domain: string }>;
 }
@@ -223,14 +259,33 @@ export async function getOperator(token: string, externalId: string) {
 export interface SubmissionItem {
   id: string;
   status: string;
+  tickets_sold?: string;
+  gross_revenue?: string;
+  prizes_paid?: string;
+  expenses?: string;
   gross_gaming_revenue: string;
   tax_due: string;
   tax_paid: string;
   tax_outstanding: string;
   submitted_at: string | null;
+  notes?: string | null;
+  reviewed_at?: string | null;
   operator?: { external_id: string; trading_name: string };
-  reporting_period?: { label: string };
+  reporting_period?: { id?: string; label: string; year?: number; month?: number };
+  reviewer?: { full_name: string };
+  documents?: SubmissionDocument[];
 }
+
+export interface SubmissionDocument {
+  id: string;
+  title: string;
+  document_type: string;
+  file_size: string | null;
+  mime_type: string | null;
+  uploaded_at: string;
+}
+
+export type SubmissionDetail = SubmissionItem;
 
 export interface EnforcementCase {
   id: string;
@@ -240,6 +295,8 @@ export interface EnforcementCase {
   description: string | null;
   status: string;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
+  opener?: { full_name: string };
   operator?: { external_id: string; trading_name: string };
   actions?: Array<{
     id: string;
@@ -266,6 +323,45 @@ export interface ComplianceOverview {
   total_arrears: string;
   overdue_submission_count: number;
   pending_submission_count: number;
+  calendar_summary: {
+    upcoming_deadlines: number;
+    overdue_filings: number;
+    pending_review: number;
+    expiring_licences: number;
+  };
+  upcoming_deadlines: Array<{
+    id: string;
+    type: "monthly_return" | "licence_renewal" | "submission_review";
+    title: string;
+    due_date: string;
+    status: "upcoming" | "due_today" | "overdue";
+    operator_external_id?: string;
+    operator_name?: string;
+  }>;
+  expiring_licences: Array<{
+    operator_external_id: string;
+    operator_name: string;
+    licence_number: string;
+    expires_at: string;
+    days_remaining: number;
+  }>;
+  overdue_filings: Array<{
+    operator_external_id: string;
+    operator_name: string;
+    last_submission_at: string | null;
+    compliance_status: string;
+    reason: string;
+    days_overdue: number | null;
+  }>;
+  pending_reviews: Array<{
+    id: string;
+    operator_external_id: string;
+    operator_name: string;
+    period: string;
+    submitted_at: string | null;
+    tax_outstanding: string;
+    is_overdue: boolean;
+  }>;
   overdue_submissions: Array<{
     id: string;
     operator_external_id: string;
@@ -305,12 +401,17 @@ export interface AuditLogItem {
   entity_id: string | null;
   ip_address: string | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
   user?: { email: string; full_name: string; role: string };
 }
 
 export async function getSubmissions(token: string, status?: string) {
   const qs = status ? `?status=${status}` : "";
   return apiRequest<SubmissionItem[]>(`/submissions${qs}`, { token });
+}
+
+export async function getSubmission(token: string, id: string) {
+  return apiRequest<SubmissionDetail>(`/submissions/${id}`, { token });
 }
 
 export async function getSubmissionStats(token: string) {
@@ -330,19 +431,34 @@ export async function reviewSubmission(
   status: "approved" | "rejected" | "revision_requested",
   notes?: string,
 ) {
-  return apiRequest(`/submissions/${id}/review`, {
+  return apiRequest<SubmissionDetail>(`/submissions/${id}/review`, {
     method: "PATCH",
     token,
     body: JSON.stringify({ status, notes }),
   });
 }
 
+export interface EnforcementWarning {
+  id: string;
+  action_type: string;
+  details: string | null;
+  created_at: string;
+  performer?: { full_name: string };
+  case?: {
+    id: string;
+    case_number: string;
+    title: string;
+    operator?: { external_id: string; trading_name: string };
+  };
+}
+
 export async function getEnforcementCases(
   token: string,
-  params?: { status?: string; operator_external_id?: string },
+  params?: { status?: string; bucket?: "open" | "resolved"; operator_external_id?: string },
 ) {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
+  if (params?.bucket) query.set("bucket", params.bucket);
   if (params?.operator_external_id)
     query.set("operator_external_id", params.operator_external_id);
   const qs = query.toString();
@@ -355,9 +471,9 @@ export async function getEnforcementCases(
 export async function createEnforcementCase(
   token: string,
   externalId: string,
-  data: { title: string; description?: string; case_type: string },
+  data: CreateEnforcementCaseInput,
 ) {
-  return apiRequest(`/operators/${externalId}/enforcement`, {
+  return apiRequest<EnforcementCase>(`/operators/${externalId}/enforcement`, {
     method: "POST",
     token,
     body: JSON.stringify(data),
@@ -384,6 +500,62 @@ export async function addEnforcementAction(
     token,
     body: JSON.stringify(data),
   });
+}
+
+export async function resolveEnforcementCase(
+  token: string,
+  caseId: string,
+  notes?: string,
+) {
+  return apiRequest<EnforcementCase>(`/enforcement/cases/${caseId}/resolve`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function deleteEnforcementCase(token: string, caseId: string) {
+  return apiRequest<{ success: boolean }>(`/enforcement/cases/${caseId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function requestEnforcementDocuments(
+  token: string,
+  caseId: string,
+  data: { documents: string; due_by?: string; notes?: string },
+) {
+  return apiRequest<EnforcementCase>(`/enforcement/cases/${caseId}/request-documents`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getEnforcementWarnings(
+  token: string,
+  params?: { operator_external_id?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.operator_external_id) {
+    query.set("operator_external_id", params.operator_external_id);
+  }
+  const qs = query.toString();
+  return apiRequest<EnforcementWarning[]>(
+    `/enforcement/cases/warnings/list${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export async function getOperatorEnforcementWarnings(
+  token: string,
+  externalId: string,
+) {
+  return apiRequest<EnforcementWarning[]>(
+    `/operators/${externalId}/enforcement/warnings`,
+    { token },
+  );
 }
 
 export async function revokeApiCredential(
@@ -413,6 +585,9 @@ export async function uploadOperatorDocument(
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
+    if (response.status === 401) {
+      forceLogout("expired");
+    }
     const message =
       data?.message ?? data?.error ?? `Upload failed (${response.status})`;
     throw new ApiError(
@@ -445,6 +620,21 @@ export async function getDashboardAlerts(token: string) {
   return apiRequest<DashboardAlerts>("/dashboard/alerts", { token });
 }
 
+export interface NavBadges {
+  submissions: number;
+  compliance: number;
+  enforcement: number;
+  payments: number;
+}
+
+export async function getNavBadges(token: string) {
+  return apiRequest<NavBadges>("/dashboard/nav-badges", { token });
+}
+
+export async function getNotifications(token: string) {
+  return apiRequest<NotificationsResponse>("/notifications", { token });
+}
+
 export async function getExtendedDashboardStats(token: string) {
   return apiRequest<{
     active_licences: number;
@@ -453,6 +643,50 @@ export async function getExtendedDashboardStats(token: string) {
     total_tax_paid: string;
     total_tax_due: string;
   }>("/dashboard/stats", { token });
+}
+
+export type DashboardCharts = {
+  ggr_trend: Array<{ month: string; ggr: number; tax: number }>;
+  operator_status: Array<{ name: string; value: number; color: string }>;
+  compliance_breakdown: Array<{ name: string; value: number; color: string }>;
+  metrics: {
+    compliance_rate: number;
+    tax_collection_rate: number;
+    active_share: number;
+    expiring_licences: number;
+  };
+};
+
+export async function getDashboardCharts(token: string) {
+  return apiRequest<DashboardCharts>("/dashboard/charts", { token });
+}
+
+export type DashboardPerformance = {
+  from: string;
+  to: string;
+  metrics: {
+    compliance_rate: number;
+    tax_collection_rate: number;
+    payment_success_rate: number;
+    expiring_licences: number;
+    revenue: string;
+    tax_collected: string;
+    payments_completed: number;
+  };
+};
+
+export async function getDashboardPerformance(
+  token: string,
+  params: { from: string; to: string },
+) {
+  const query = new URLSearchParams({
+    from: params.from,
+    to: params.to,
+  });
+  return apiRequest<DashboardPerformance>(
+    `/dashboard/performance?${query.toString()}`,
+    { token },
+  );
 }
 
 export async function getLiveActivity(
@@ -564,17 +798,43 @@ export async function generateApiCredential(token: string, siteId: string) {
   );
 }
 
+export interface AuditLogPage {
+  items: AuditLogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export async function getAuditLogs(
   token: string,
-  params?: { user_id?: string; action?: string; from?: string; to?: string },
+  params?: {
+    user_id?: string;
+    action?: string;
+    category?: "auth" | "platform";
+    from?: string;
+    to?: string;
+    page?: number;
+    page_size?: number;
+  },
 ) {
   const query = new URLSearchParams();
   if (params?.user_id) query.set("user_id", params.user_id);
   if (params?.action) query.set("action", params.action);
+  if (params?.category) query.set("category", params.category);
   if (params?.from) query.set("from", params.from);
   if (params?.to) query.set("to", params.to);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.page_size) query.set("page_size", String(params.page_size));
   const qs = query.toString();
-  return apiRequest<AuditLogItem[]>(`/audit-logs${qs ? `?${qs}` : ""}`, { token });
+  return apiRequest<AuditLogPage>(`/audit-logs${qs ? `?${qs}` : ""}`, { token });
+}
+
+export async function wipeAuditLogs(token: string) {
+  return apiRequest<{ deleted_count: number }>("/audit-logs", {
+    method: "DELETE",
+    token,
+  });
 }
 
 export function downloadUrl(path: string, _token: string) {
@@ -585,9 +845,41 @@ export async function downloadWithAuth(token: string, path: string) {
   const response = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok) throw new ApiError("Download failed", response.status);
+  if (!response.ok) {
+    if (response.status === 401) forceLogout("expired");
+    throw new ApiError("Download failed", response.status);
+  }
   return response.blob();
 }
+
+export type ReportPreviewSummary = {
+  label: string;
+  value: string;
+  tone?: "default" | "success" | "warning" | "danger";
+};
+
+export type ReportPreviewChart = {
+  type: "bar" | "pie" | "line";
+  x_key: string;
+  series: Array<{ key: string; label: string; color?: string }>;
+  data: Array<Record<string, string | number>>;
+};
+
+export type ReportPreview = {
+  title: string;
+  headers: string[];
+  rows: Array<Record<string, string | number>>;
+  row_count: number;
+  summary: ReportPreviewSummary[];
+  chart: ReportPreviewChart | null;
+  table_view: string;
+};
+
+export type ReportPreviewResponse = {
+  slug: string;
+  category: string;
+  preview: ReportPreview;
+};
 
 export type ReportDefinition = {
   id: string;
@@ -635,6 +927,22 @@ export async function getReport(token: string, slug: string) {
   return apiRequest<ReportDefinition>(`/reports/${slug}`, { token });
 }
 
+export async function getReportPreview(
+  token: string,
+  slug: string,
+  parameters: Record<string, string> = {},
+) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(parameters)) {
+    if (value !== "") query.set(key, value);
+  }
+  const qs = query.toString();
+  return apiRequest<ReportPreviewResponse>(
+    `/reports/${slug}/preview${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
 export async function getScheduledReports(token: string) {
   return apiRequest<ReportDefinition[]>("/reports/scheduled", { token });
 }
@@ -663,7 +971,10 @@ export async function downloadReportRun(token: string, runId: string) {
   const response = await fetch(`${API_URL}/reports/runs/${runId}/download`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok) throw new ApiError("Download failed", response.status);
+  if (!response.ok) {
+    if (response.status === 401) forceLogout("expired");
+    throw new ApiError("Download failed", response.status);
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
@@ -693,8 +1004,40 @@ export interface RegionalCountyCommercial {
   annual_ggr: number;
 }
 
+export interface RegionalCountyPerformance extends RegionalCountyCommercial {
+  sessions: number;
+  play_safe: number;
+  sessions_change_pct: number | null;
+  play_safe_change_pct: number | null;
+  ggr_ytd_change_pct: number | null;
+}
+
+export interface RegionalNationalSummary {
+  total_sessions: number;
+  sessions_change_pct: number | null;
+  sessions_change_label: string;
+  total_sessions_ytd: number;
+  sessions_ytd_change_pct: number | null;
+  sessions_ytd_change_label: string;
+  total_annual_ggr: number;
+  ggr_ytd: number;
+  ggr_ytd_change_pct: number | null;
+  ggr_ytd_change_label: string;
+  ggr_recent_change_pct: number | null;
+  ggr_recent_change_label: string;
+  active_counties: number;
+  total_counties: number;
+  highest_growth_county: {
+    county: string;
+    change_pct: number | null;
+    metric: string;
+  } | null;
+}
+
 export interface RegionalOverview {
   days: number;
+  national_summary: RegionalNationalSummary;
+  county_performance: RegionalCountyPerformance[];
   counties: RegionalCountyCommercial[];
   play_safe_by_county: Array<{ county: string; count: number }>;
   self_exclusion_by_county: Array<{ county: string; count: number }>;
@@ -722,6 +1065,13 @@ export interface RegionalCountyDetail {
   play_safe_activations: number;
   self_exclusion_requests: number;
   session_count: number;
+  sessions_change_pct: number | null;
+  sessions_ytd_change_pct: number | null;
+  play_safe_change_pct: number | null;
+  self_exclusion_change_pct: number | null;
+  ggr_ytd: number;
+  ggr_ytd_change_pct: number | null;
+  ggr_ytd_change_label: string;
   peak_time_heatmap: Record<string, number[]>;
   stake_band_distribution: Record<string, number>;
   age_band_distribution: Record<string, number>;
@@ -749,7 +1099,10 @@ export async function exportRegionalDataset(token: string, days = 30) {
   const response = await fetch(`${API_URL}/regional/export?days=${days}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok) throw new ApiError("Export failed", response.status);
+  if (!response.ok) {
+    if (response.status === 401) forceLogout("expired");
+    throw new ApiError("Export failed", response.status);
+  }
   const blob = await response.blob();
   const disposition = response.headers.get("content-disposition") ?? "";
   const match = disposition.match(/filename="([^"]+)"/);

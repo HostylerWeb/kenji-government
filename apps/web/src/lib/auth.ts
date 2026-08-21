@@ -8,6 +8,27 @@ const ACTIVITY_KEY = "gra_last_activity";
 export const SESSION_IDLE_MS =
   Number(process.env.NEXT_PUBLIC_SESSION_IDLE_MS ?? 1800000);
 
+export type LogoutReason = "idle" | "expired";
+
+export function isAccessTokenExpired(accessToken: string): boolean {
+  try {
+    const payload = JSON.parse(atob(accessToken.split(".")[1] ?? "")) as {
+      exp?: number;
+    };
+    if (!payload.exp) return false;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
+export function forceLogout(reason: LogoutReason = "expired") {
+  clearAuth();
+  if (typeof window !== "undefined") {
+    window.location.replace(`/login?reason=${reason}`);
+  }
+}
+
 export function getStoredAuth(): {
   access_token: string;
   refresh_token: string;
@@ -21,7 +42,7 @@ export function getStoredAuth(): {
 
   if (!access_token || !refresh_token || !userRaw) return null;
 
-  if (isSessionIdleExpired()) {
+  if (isSessionIdleExpired() || isAccessTokenExpired(access_token)) {
     clearAuth();
     return null;
   }
@@ -42,6 +63,19 @@ export function storeAuth(data: AuthResponse) {
   localStorage.setItem(REFRESH_KEY, data.refresh_token);
   localStorage.setItem(USER_KEY, JSON.stringify(data.user));
   touchSessionActivity();
+  dispatchAuthUserUpdated(data.user);
+}
+
+export function updateStoredUser(user: AuthResponse["user"]) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  dispatchAuthUserUpdated(user);
+}
+
+function dispatchAuthUserUpdated(user: AuthResponse["user"]) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("gra-auth-updated", { detail: user }),
+  );
 }
 
 export function clearAuth() {

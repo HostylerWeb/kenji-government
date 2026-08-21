@@ -13,6 +13,7 @@ import {
   mfaSetupSchema,
   mfaVerifySchema,
   securityPreferencesSchema,
+  updateProfileSchema,
 } from "@kenji-government/shared";
 import { AuthService } from "./auth.service";
 import { LoginDto, RefreshTokenDto } from "./dto/login.dto";
@@ -139,6 +140,24 @@ export class AuthController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.authService.updateSecurityPreferences(user.id, parsed.data);
+  }
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  getProfile(@CurrentUser() user: AuthUser) {
+    return this.authService.getProfile(user.id);
+  }
+
+  @Post("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  updateProfile(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    const parsed = updateProfileSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.authService.updateProfile(user.id, parsed.data);
   }
 
   @Post("refresh")

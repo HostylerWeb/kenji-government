@@ -15,11 +15,15 @@ import {
   type UserRole,
 } from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   private assertRoleAssignment(actor: AuthUser, role: UserRole) {
     const allowed = isSuperAdmin(actor.role)
@@ -58,7 +62,7 @@ export class UsersService {
     }
 
     const password_hash = await bcrypt.hash(dto.password, 12);
-    return this.prisma.client.users.create({
+    const user = await this.prisma.client.users.create({
       data: {
         email: dto.email,
         password_hash,
@@ -75,6 +79,21 @@ export class UsersService {
         created_at: true,
       },
     });
+
+    await this.auditService.log({
+      user_id: actor.id,
+      action: "user_created",
+      entity_type: "users",
+      entity_id: user.id,
+      category: "platform",
+      metadata: {
+        summary: `Created staff user ${user.full_name} (${user.email})`,
+        email: user.email,
+        role: user.role,
+      },
+    });
+
+    return user;
   }
 
   async update(actor: AuthUser, id: string, dto: UpdateUserDto) {
@@ -104,7 +123,7 @@ export class UsersService {
       );
     }
 
-    return this.prisma.client.users.update({
+    const updated = await this.prisma.client.users.update({
       where: { id },
       data: dto,
       select: {
@@ -116,6 +135,22 @@ export class UsersService {
         last_login_at: true,
       },
     });
+
+    await this.auditService.log({
+      user_id: actor.id,
+      action: "user_updated",
+      entity_type: "users",
+      entity_id: updated.id,
+      category: "platform",
+      metadata: {
+        summary: `Updated staff user ${updated.full_name} (${updated.email})`,
+        email: updated.email,
+        role: updated.role,
+        is_active: updated.is_active,
+      },
+    });
+
+    return updated;
   }
 
   async listSites(externalId: string) {

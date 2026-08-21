@@ -31,8 +31,12 @@ export default function LoginPage() {
   }, [router]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.location.search.includes("reason=idle")) {
+    if (typeof window === "undefined") return;
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    if (reason === "idle") {
       setError("Your session expired due to inactivity. Please sign in again.");
+    } else if (reason === "expired") {
+      setError("Your session has expired. Please sign in again.");
     }
   }, []);
 

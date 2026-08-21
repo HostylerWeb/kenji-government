@@ -6,7 +6,36 @@ interface Tab {
   id: string;
   label: string;
   count?: number;
+  tone?: "success" | "warning" | "danger" | "muted" | "primary";
 }
+
+const tabToneStyles = {
+  success: {
+    active: "text-success after:bg-success",
+    countActive: "bg-success text-white",
+    countIdle: "bg-success-subtle text-success",
+  },
+  warning: {
+    active: "text-warning after:bg-warning",
+    countActive: "bg-warning text-white",
+    countIdle: "bg-warning-subtle text-warning",
+  },
+  danger: {
+    active: "text-danger after:bg-danger",
+    countActive: "bg-danger text-white",
+    countIdle: "bg-danger-subtle text-danger",
+  },
+  muted: {
+    active: "text-muted-foreground after:bg-muted-foreground",
+    countActive: "bg-muted-foreground text-white",
+    countIdle: "bg-secondary text-muted-foreground",
+  },
+  primary: {
+    active: "text-primary after:bg-primary",
+    countActive: "bg-primary text-primary-foreground",
+    countIdle: "bg-primary-subtle text-primary",
+  },
+} as const;
 
 export function Tabs({
   tabs,
@@ -30,18 +59,21 @@ export function Tabs({
           className
         )}
       >
-        {tabs.map((tab) => (
+        {tabs.map((tab) => {
+          const tone = tab.tone ? tabToneStyles[tab.tone] : null;
+          const isActive = active === tab.id;
+          return (
           <button
             key={tab.id}
             role="tab"
             type="button"
-            aria-selected={active === tab.id}
+            aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={cn(
               "relative shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors outline-none",
               "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:transition-all",
-              active === tab.id
-                ? "text-primary after:bg-primary"
+              isActive
+                ? tone?.active ?? "text-primary after:bg-primary"
                 : "text-muted-foreground hover:text-foreground after:bg-transparent hover:after:bg-border"
             )}
           >
@@ -50,16 +82,18 @@ export function Tabs({
               <span
                 className={cn(
                   "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                  active === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground"
+                  tone?.countActive ??
+                    (isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground")
                 )}
               >
                 {tab.count}
               </span>
             )}
           </button>
-        ))}
+        );
+        })}
       </div>
     );
   }

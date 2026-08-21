@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
@@ -16,15 +16,55 @@ import {
   ClipboardList,
   Scale,
   FileBarChart,
-  Bell,
   ChevronRight,
-  Search,
   PanelLeftClose,
+  User,
+  ChevronDown,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthUser } from "@kenji-government/shared";
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/auth";
+import { logoutRequest } from "@/lib/api";
+import { NotificationsBell } from "@/components/notifications-bell";
+import { useNavBadges } from "@/lib/use-nav-badges";
+import type { NavBadges } from "@/lib/api";
+
+const navBadgeKeyByHref: Partial<Record<string, keyof NavBadges>> = {
+  "/submissions": "submissions",
+  "/compliance": "compliance",
+  "/enforcement": "enforcement",
+  "/payments": "payments",
+};
+
+function NavBadgeCount({
+  count,
+  collapsed,
+}: {
+  count: number;
+  collapsed: boolean;
+}) {
+  if (count <= 0) return null;
+
+  const label = count > 99 ? "99+" : String(count);
+
+  if (collapsed) {
+    return (
+      <span
+        className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold leading-none text-white"
+        aria-label={`${count} items need attention`}
+      >
+        {count > 9 ? "9+" : label}
+      </span>
+    );
+  }
+
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold leading-none text-white">
+      {label}
+    </span>
+  );
+}
 
 const navGroups = [
   {
@@ -52,8 +92,8 @@ const navGroups = [
 const mobileTabs = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/operators", label: "Operators", icon: Building2 },
-  { href: "/submissions", label: "Queue", icon: FileText },
-  { href: "/enforcement", label: "Cases", icon: Shield },
+  { href: "/submissions", label: "Queue", icon: FileText, badgeKey: "submissions" as const },
+  { href: "/enforcement", label: "Cases", icon: Shield, badgeKey: "enforcement" as const },
   { href: "/settings", label: "More", icon: Settings },
 ];
 
@@ -79,11 +119,11 @@ export function AppShell({
   breadcrumbs?: Array<{ label: string; href?: string }>;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const navBadges = useNavBadges(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [query, setQuery] = useState("");
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -96,18 +136,34 @@ export function AppShell({
 
   useEffect(() => {
     setMobileOpen(false);
-    setNotesOpen(false);
+    setUserMenuOpen(false);
   }, [pathname]);
 
-  function logout() {
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
+
+  async function logout() {
+    try {
+      const authRaw = localStorage.getItem("gra_access_token");
+      if (authRaw) {
+        await logoutRequest(authRaw);
+      }
+    } catch {
+      // Still sign out locally if the API call fails.
+    }
     clearAuth();
     window.location.href = "/login";
-  }
-
-  function submitSearch(e: React.FormEvent) {
-    e.preventDefault();
-    const q = query.trim();
-    router.push(q ? `/operators?q=${encodeURIComponent(q)}` : "/operators");
   }
 
   const initials = user.full_name
@@ -154,13 +210,15 @@ export function AppShell({
                 const active =
                   pathname === item.href ||
                   (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+                const badgeKey = navBadgeKeyByHref[item.href];
+                const badgeCount = badgeKey ? navBadges[badgeKey] : 0;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     title={item.label}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                      "relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
                       collapsed && "justify-center px-2",
                       active
                         ? "bg-primary/10 font-bold text-primary"
@@ -170,39 +228,13 @@ export function AppShell({
                   >
                     <Icon className="h-[18px] w-[18px] shrink-0" />
                     {!collapsed && <span className="truncate">{item.label}</span>}
+                    <NavBadgeCount count={badgeCount} collapsed={collapsed} />
                   </Link>
                 );
               })}
             </div>
           ))}
         </nav>
-
-        <div className="border-t border-border bg-slate-50/50 p-3">
-          {!collapsed && (
-            <div className="mb-2 flex items-center gap-3 px-1 py-1">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a551] text-xs font-semibold text-white">
-                {initials}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-900">{user.full_name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {roleLabels[user.role] ?? user.role}
-                </p>
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={logout}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-500 hover:bg-slate-200 hover:text-slate-900",
-              collapsed && "justify-center px-2"
-            )}
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && "Sign out"}
-          </button>
-        </div>
       </aside>
 
       {mobileOpen && (
@@ -240,55 +272,83 @@ export function AppShell({
               <PanelLeftClose className="h-4 w-4" />
             </button>
 
-            <form onSubmit={submitSearch} className="relative hidden min-w-0 max-w-md flex-1 sm:block">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search operators…"
-                className="h-9 w-full rounded-md border-0 bg-muted pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </form>
-
             <div className="min-w-0 sm:hidden">
               <h1 className="truncate text-sm font-semibold">{title}</h1>
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1 lg:gap-2">
-            <div className="relative">
+            <NotificationsBell />
+            <div className="relative" ref={userMenuRef}>
               <button
                 type="button"
-                onClick={() => setNotesOpen((o) => !o)}
-                className="relative rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Notifications"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 hover:bg-slate-100"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Account menu"
               >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#c12d31]" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a551] text-xs font-semibold text-white">
+                  {initials}
+                </div>
+                <div className="hidden text-left xl:block">
+                  <p className="text-xs font-semibold leading-tight text-slate-900">
+                    {user.full_name}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {roleLabels[user.role] ?? user.role}
+                  </p>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "hidden h-4 w-4 text-slate-400 transition-transform lg:block",
+                    userMenuOpen && "rotate-180",
+                  )}
+                />
               </button>
-              {notesOpen && (
-                <div className="absolute right-0 top-11 z-40 w-80 overflow-hidden rounded-xl border border-border bg-white shadow-lg">
-                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <p className="text-sm font-semibold">Notifications</p>
-                    <span className="rounded-full bg-[#00a551] px-2 py-0.5 text-[10px] font-semibold text-white">
-                      Live
-                    </span>
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-xl border border-border bg-white py-1 shadow-lg"
+                >
+                  <div className="border-b border-border px-4 py-3 xl:hidden">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {user.full_name}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {roleLabels[user.role] ?? user.role}
+                    </p>
                   </div>
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">
-                    No new alerts. Open cases appear on the dashboard.
-                  </div>
+                  <Link
+                    href="/profile"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <User className="h-4 w-4" />
+                    My Profile
+                  </Link>
+                  <Link
+                    href="/settings"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </Link>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={logout}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-destructive hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log out
+                  </button>
                 </div>
               )}
-            </div>
-            <div className="hidden items-center gap-2 pl-1 lg:flex">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a551] text-xs font-semibold text-white">
-                {initials}
-              </div>
-              <div className="hidden xl:block">
-                <p className="text-xs font-semibold leading-tight text-slate-900">{user.full_name}</p>
-                <p className="text-[10px] text-muted-foreground">{roleLabels[user.role] ?? user.role}</p>
-              </div>
             </div>
           </div>
         </header>
@@ -333,16 +393,24 @@ export function AppShell({
             const active =
               pathname === tab.href ||
               (tab.href !== "/dashboard" && pathname.startsWith(`${tab.href}/`));
+            const badgeCount = tab.badgeKey ? navBadges[tab.badgeKey] : 0;
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1.5 text-[10px] font-medium",
+                  "relative flex flex-col items-center gap-0.5 px-3 py-1.5 text-[10px] font-medium",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <span className="relative">
+                  <Icon className="h-5 w-5" />
+                  {badgeCount > 0 && (
+                    <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold leading-none text-white">
+                      {badgeCount > 9 ? "9+" : badgeCount}
+                    </span>
+                  )}
+                </span>
                 {tab.label}
               </Link>
             );

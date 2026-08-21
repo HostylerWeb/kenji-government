@@ -8,11 +8,9 @@ import {
   type LiveFeedEvent,
   type OperatorUpdatedEventInput,
   type PaymentEventInput,
-  type TicketEventInput,
 } from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LivePubSubService } from "../live/live-pubsub.service";
-import { LiveCountersService } from "../live/live-counters.service";
 import { LiveService } from "../live/live.service";
 import type { IngestSiteContext } from "./decorators/ingest-site.decorator";
 
@@ -21,7 +19,6 @@ export class RealtimeEventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pubsub: LivePubSubService,
-    private readonly counters: LiveCountersService,
     private readonly live: LiveService,
   ) {}
 
@@ -40,44 +37,20 @@ export class RealtimeEventsService {
       return this.formatIngestResponse(existing);
     }
 
-    const feedEvent = await this.persistEvent(
-      site,
-      idempotencyKey,
-      "ticket",
-      parsed.data.action === "purchased"
-        ? LIVE_EVENT_TYPES.TICKET_PURCHASED
-        : LIVE_EVENT_TYPES.TICKET_VOIDED,
-      this.ticketSummary(parsed.data),
-      parsed.data.amount,
-      {
-        ticket_id: parsed.data.ticket_id,
-        raffle_id: parsed.data.raffle_id,
-        raffle_name: parsed.data.raffle_name,
-        action: parsed.data.action,
-        currency: parsed.data.currency ?? "KES",
+    // Ticket events are accepted for operator audit/idempotency only — they are
+    // not written to the oversight feed, Redis counters, or SSE streams.
+    const event = await this.prisma.client.ingest_events.create({
+      data: {
+        operator_site_id: site.siteId,
+        event_type: "ticket",
+        idempotency_key: idempotencyKey,
+        raw_payload: parsed.data as Prisma.InputJsonValue,
+        status: "processed",
+        processed_at: new Date(),
       },
-      new Date(parsed.data.purchased_at),
-    );
-
-    if (parsed.data.action === "purchased") {
-      await this.counters.recordTicketPurchase(
-        site.operatorExternalId,
-        parsed.data.amount,
-      );
-    } else {
-      await this.counters.recordTicketVoid(
-        site.operatorExternalId,
-        parsed.data.amount,
-      );
-    }
-
-    await this.pubsub.publish(feedEvent, "ticket");
-
-    const event = await this.prisma.client.ingest_events.findUnique({
-      where: { idempotency_key: idempotencyKey },
     });
 
-    return this.formatIngestResponse(event!);
+    return this.formatIngestResponse(event);
   }
 
   async submitPaymentEvent(
@@ -214,14 +187,6 @@ export class RealtimeEventsService {
     });
 
     return this.live.toFeedEvent(feedRow);
-  }
-
-  private ticketSummary(data: TicketEventInput) {
-    const raffle = data.raffle_name ? ` — ${data.raffle_name}` : "";
-    const amount = `Ksh ${data.amount.toLocaleString("en-KE")}`;
-    return data.action === "purchased"
-      ? `Ticket purchased ${amount}${raffle}`
-      : `Ticket voided ${amount}${raffle}`;
   }
 
   private paymentSummary(data: PaymentEventInput) {

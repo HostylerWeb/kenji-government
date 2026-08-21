@@ -76,6 +76,17 @@ export default function PaymentsOverviewPage() {
               icon={<AlertTriangle className="h-5 w-5" />}
               variant={overview.open_aml_alerts > 0 ? "warning" : "default"}
             />
+            <StatCard
+              title="Pending Withdrawals"
+              value={overview.pending_withdrawal_batches}
+              subLabel={
+                <Link href="/payments/tax-escrow" className="flex items-center gap-1 text-primary hover:underline text-xs">
+                  Tax escrow batches <ArrowUpRight className="h-3 w-3" />
+                </Link>
+              }
+              icon={<Banknote className="h-5 w-5" />}
+              variant={overview.pending_withdrawal_batches > 0 ? "warning" : "default"}
+            />
           </>
         ) : null}
       </div>

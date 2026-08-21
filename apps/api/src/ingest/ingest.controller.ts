@@ -72,12 +72,23 @@ export class IngestController {
     const fields = data.fields as Record<string, { value?: string }>;
     const title = fields.title?.value ?? data.filename;
     const document_type = fields.document_type?.value ?? "other";
+    const reporting_year = fields.reporting_year?.value
+      ? Number(fields.reporting_year.value)
+      : undefined;
+    const reporting_month = fields.reporting_month?.value
+      ? Number(fields.reporting_month.value)
+      : undefined;
     const buffer = await data.toBuffer();
 
     return this.ingest.uploadDocument(
       site,
       idempotencyKey,
-      { title, document_type },
+      {
+        title,
+        document_type,
+        reporting_year: Number.isFinite(reporting_year) ? reporting_year : undefined,
+        reporting_month: Number.isFinite(reporting_month) ? reporting_month : undefined,
+      },
       {
         filename: data.filename,
         mimetype: data.mimetype,

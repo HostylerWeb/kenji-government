@@ -97,3 +97,34 @@ export function complianceLabel(status: string): string {
       return status;
   }
 }
+
+export function operatorStatusBadgeVariant(
+  status: string,
+): "success" | "warning" | "danger" | "muted" {
+  switch (status) {
+    case "active":
+      return "success";
+    case "pending":
+      return "warning";
+    case "suspended":
+    case "revoked":
+      return "danger";
+    default:
+      return "muted";
+  }
+}
+
+export function operatorStatusLabel(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "suspended":
+      return "Suspended";
+    case "revoked":
+      return "Revoked";
+    case "pending":
+      return "Pending";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}

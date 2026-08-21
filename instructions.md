@@ -150,6 +150,18 @@ cd /var/www/kenji-government
 npm run dev:web
 ```
 
+### Option A2 — Detached servers (survive Cursor/agent restarts)
+
+If the site randomly shows `ERR_CONNECTION_REFUSED`, the dev servers were likely started in a Cursor background terminal that got cleaned up. Use detached mode instead:
+
+```bash
+cd /var/www/kenji-government
+docker compose up -d
+npm run dev:persistent
+```
+
+Stop later with `npm run dev:stop`. Logs: `/tmp/kenji-government-dev/api.log` and `web.log`.
+
 ### Option B — All workspaces that define `dev`
 
 ```bash
@@ -203,6 +215,7 @@ Run from repo root:
 | Command | Description |
 |---------|-------------|
 | `npm run dev:web` | Next.js dev server (:3000) |
+| `npm run dev:web:clean` | Same, but wipes `.next` first (only if cache is corrupted) |
 | `npm run dev:api` | Staff NestJS API (:4000) |
 | `npm run dev:ingest` | Operator ingest API (:4001) |
 | `npm run dev:worker` | BullMQ ingest processor |
@@ -274,16 +287,21 @@ Then restart the dev servers.
 Often caused by a **stale or corrupted** `.next` cache — common after running `npm run build` while `dev:web` is still running, or after many hot-reloads during development.
 
 ```bash
-fuser -k 3000/tcp 4000/tcp
-rm -rf apps/web/.next
-npm run build -w @kenji-government/api   # restores API dist if needed
-npm run dev:api
-npm run dev:web
+npm run dev:stop
+CLEAN_NEXT=1 npm run dev:persistent
 ```
 
 Symptoms: plain text `Internal Server Error` on `/login` or `/dashboard`, or errors like `Cannot find module './728.js'` in the terminal.
 
 Do **not** run `next build` while `dev:web` is running.
+
+### `ERR_CONNECTION_REFUSED` / site stops randomly
+
+The dev servers are **not running**. Common causes:
+
+1. **Cursor/agent background terminals** — processes started by the AI agent are killed when that session ends (~3 min). Use `npm run dev:persistent` or run `dev:api` + `dev:web` in **your own** terminal tabs.
+2. **Port killed** — run `npm run dev:stop` then `npm run dev:persistent`.
+3. **Cold restart** — wait ~20s after starting; Nest/Next need time to compile on first boot.
 
 ### Submissions not appearing after ingest POST
 

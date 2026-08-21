@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { LiveFeedEvent } from "@kenji-government/shared";
+import { IMPORTANT_LIVE_EVENT_TYPES } from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LivePubSubService } from "./live-pubsub.service";
 import { LiveCountersService } from "./live-counters.service";
@@ -26,7 +27,10 @@ export class LiveService {
     }
 
     const rows = await this.prisma.client.live_activity_feed.findMany({
-      where: operator ? { operator_id: operator.id } : undefined,
+      where: {
+        ...(operator ? { operator_id: operator.id } : {}),
+        event_type: { in: [...IMPORTANT_LIVE_EVENT_TYPES] },
+      },
       include: {
         operator: {
           select: { external_id: true, trading_name: true },

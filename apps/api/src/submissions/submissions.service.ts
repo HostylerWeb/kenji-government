@@ -1,6 +1,15 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+
+function serializeDocument(document: Record<string, unknown>) {
+  return {
+    ...document,
+    file_size:
+      document.file_size != null ? String(document.file_size) : null,
+  };
+}
 
 function serializeSubmission(submission: Record<string, unknown>) {
   const numericFields = [
@@ -21,12 +30,20 @@ function serializeSubmission(submission: Record<string, unknown>) {
   if (result.tickets_sold != null) {
     result.tickets_sold = String(result.tickets_sold);
   }
+  if (Array.isArray(result.documents)) {
+    result.documents = result.documents.map((doc) =>
+      serializeDocument(doc as Record<string, unknown>),
+    );
+  }
   return result;
 }
 
 @Injectable()
 export class SubmissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async list(filters?: {
     status?: string;
@@ -60,6 +77,9 @@ export class SubmissionsService {
         },
         reporting_period: true,
         reviewer: { select: { id: true, full_name: true, email: true } },
+        documents: {
+          orderBy: { uploaded_at: "desc" },
+        },
       },
       orderBy: [{ submitted_at: "desc" }, { created_at: "desc" }],
     });
@@ -96,6 +116,9 @@ export class SubmissionsService {
         operator: true,
         reporting_period: true,
         reviewer: { select: { id: true, full_name: true, email: true } },
+        documents: {
+          orderBy: [{ document_type: "asc" }, { uploaded_at: "desc" }],
+        },
       },
     });
 
@@ -129,6 +152,33 @@ export class SubmissionsService {
       include: {
         operator: { select: { external_id: true, trading_name: true } },
         reporting_period: true,
+        reviewer: { select: { id: true, full_name: true, email: true } },
+        documents: {
+          orderBy: [{ document_type: "asc" }, { uploaded_at: "desc" }],
+        },
+      },
+    });
+
+    const action =
+      status === "approved"
+        ? "submission_approved"
+        : status === "rejected"
+          ? "submission_rejected"
+          : "submission_revision_requested";
+
+    await this.auditService.log({
+      user_id: reviewerId,
+      action,
+      entity_type: "submissions",
+      entity_id: id,
+      category: "platform",
+      metadata: {
+        summary: `${status.replace(/_/g, " ")} submission for ${submission.operator.trading_name} (${submission.reporting_period.label})`,
+        status,
+        details: notes,
+        external_id: submission.operator.external_id,
+        operator_name: submission.operator.trading_name,
+        period: submission.reporting_period.label,
       },
     });
 

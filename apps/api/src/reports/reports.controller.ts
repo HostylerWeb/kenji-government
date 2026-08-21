@@ -76,6 +76,15 @@ export class ReportsController {
     return reply.status(404).send({ message: "File not found" });
   }
 
+  @Get(":slug/preview")
+  preview(
+    @Param("slug") slug: string,
+    @Query() query: Record<string, string | undefined>,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.reports.previewReport(slug, user, query);
+  }
+
   @Get(":slug")
   getDefinition(@Param("slug") slug: string, @CurrentUser() user: AuthUser) {
     return this.reports.getDefinition(slug, user);

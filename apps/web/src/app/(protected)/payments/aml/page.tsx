@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ShieldAlert, CheckCircle, ArrowUpRight, Inbox } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
@@ -29,15 +30,31 @@ function severityVariant(severity: string): "danger" | "warning" | "muted" {
 }
 
 export default function AmlQueuePage() {
+  return (
+    <Suspense fallback={null}>
+      <AmlQueuePageContent />
+    </Suspense>
+  );
+}
+
+function AmlQueuePageContent() {
   const { user, token } = useAuth();
+  const searchParams = useSearchParams();
   const [alerts, setAlerts] = useState<AmlAlert[]>([]);
   const [selected, setSelected] = useState<AmlAlert | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
-    getAmlAlerts(token, "open").then(setAlerts).catch(() => {});
-  }, [token]);
+    getAmlAlerts(token, "open").then((rows) => {
+      setAlerts(rows);
+      const alertId = searchParams.get("alert");
+      if (alertId) {
+        const match = rows.find((row) => row.id === alertId);
+        if (match) setSelected(match);
+      }
+    }).catch(() => {});
+  }, [token, searchParams]);
 
   async function refresh() {
     if (!token) return;

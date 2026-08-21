@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { APP_INTERCEPTOR } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./storage/storage.module";
 import { HealthModule } from "./health/health.module";
@@ -18,7 +17,7 @@ import { ReportsModule } from "./reports/reports.module";
 import { SettingsModule } from "./settings/settings.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { RegionalModule } from "./regional/regional.module";
-import { AuditInterceptor } from "./audit/audit.interceptor";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -40,12 +39,7 @@ import { AuditInterceptor } from "./audit/audit.interceptor";
     RegionalModule,
     SettingsModule,
     PaymentsModule,
-  ],
-  providers: [
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: AuditInterceptor,
-    },
+    NotificationsModule,
   ],
 })
 export class AppModule {}

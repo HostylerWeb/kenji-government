@@ -1,18 +1,196 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ShieldCheck, AlertTriangle, XCircle, DollarSign, CheckCircle2 } from "lucide-react";
+import {
+  ShieldCheck,
+  AlertTriangle,
+  XCircle,
+  DollarSign,
+  Calendar,
+  Clock,
+  FileText,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge, complianceBadgeVariant, complianceLabel } from "@/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
 import { StatCard } from "@/components/stat-card";
-import { EmptyState } from "@/components/empty-state";
 import { SkeletonCard } from "@/components/skeleton";
 import { PageHeader } from "@/components/page-header";
+import {
+  ComplianceAlertsSection,
+  ComplianceCalendarSection,
+} from "@/components/compliance-calendar";
 import { useAuth } from "@/lib/use-auth";
 import { getComplianceOverview, type ComplianceOverview } from "@/lib/api";
-import { formatKsh } from "@/lib/utils";
+import { cn, formatKsh } from "@/lib/utils";
+
+type OperatorRow = ComplianceOverview["operators"][number];
+type SortKey = "operator" | "status" | "tax_outstanding" | "licence";
+type SortDir = "asc" | "desc";
+
+const COMPLIANCE_ORDER: Record<string, number> = {
+  compliant: 0,
+  at_risk: 1,
+  non_compliant: 2,
+};
+
+const NUMERIC_SORT_DEFAULTS: Partial<Record<SortKey, SortDir>> = {
+  tax_outstanding: "desc",
+  licence: "desc",
+};
+
+function compareValues(a: OperatorRow, b: OperatorRow, key: SortKey): number {
+  switch (key) {
+    case "operator":
+      return a.trading_name.localeCompare(b.trading_name, "en-KE");
+    case "status":
+      return (
+        (COMPLIANCE_ORDER[a.compliance_status] ?? 99) -
+        (COMPLIANCE_ORDER[b.compliance_status] ?? 99)
+      );
+    case "tax_outstanding":
+      return Number(a.tax_outstanding ?? 0) - Number(b.tax_outstanding ?? 0);
+    case "licence":
+      return Number(a.licence_expiring) - Number(b.licence_expiring);
+    default:
+      return 0;
+  }
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  direction: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const isActive = activeKey === sortKey;
+  const Icon = !isActive ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <th className={cn("px-5 py-3", className)}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors",
+          isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+      </button>
+    </th>
+  );
+}
+
+function OperatorComplianceTiersTable({ operators }: { operators: OperatorRow[] }) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(NUMERIC_SORT_DEFAULTS[key] ?? "asc");
+  }
+
+  const sortedOperators = useMemo(() => {
+    if (!sortKey) return operators;
+    const sorted = [...operators].sort((a, b) => compareValues(a, b, sortKey));
+    return sortDir === "desc" ? sorted.reverse() : sorted;
+  }, [operators, sortKey, sortDir]);
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Operator Compliance Tiers</CardTitle></CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-border bg-secondary/50">
+              <tr>
+                <SortableHeader
+                  label="Operator"
+                  sortKey="operator"
+                  activeKey={sortKey}
+                  direction={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Status"
+                  sortKey="status"
+                  activeKey={sortKey}
+                  direction={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Tax Outstanding"
+                  sortKey="tax_outstanding"
+                  activeKey={sortKey}
+                  direction={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Licence"
+                  sortKey="licence"
+                  activeKey={sortKey}
+                  direction={sortDir}
+                  onSort={handleSort}
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedOperators.map((op) => (
+                <tr
+                  key={op.external_id}
+                  className="border-b border-border/50 last:border-0 hover:bg-secondary/30"
+                >
+                  <td className="px-5 py-3.5">
+                    <Link
+                      href={`/operators/${op.external_id}`}
+                      className="font-medium hover:text-primary transition-colors"
+                    >
+                      {op.trading_name}
+                    </Link>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <Badge variant={complianceBadgeVariant(op.compliance_status)} dot>
+                      {complianceLabel(op.compliance_status)}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-3.5 tabular-nums">
+                    {formatKsh(op.tax_outstanding)}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {op.licence_expiring ? (
+                      <Badge variant="warning" dot>Expiring soon</Badge>
+                    ) : (
+                      <Badge variant="success" dot>Active</Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function CompliancePage() {
   const { user, token } = useAuth();
@@ -31,11 +209,11 @@ export default function CompliancePage() {
   if (!user) return null;
 
   return (
-    <AppShell user={user} title="Compliance Overview">
+    <AppShell user={user} title="Compliance Calendar">
       <div className="space-y-5">
         <PageHeader
-          title="Compliance Overview"
-          subtitle="Operator compliance tiers, tax arrears and overdue submissions"
+          title="Compliance Calendar"
+          subtitle="Track filing deadlines, licence renewals, and operator compliance tiers"
           breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Compliance" }]}
         />
 
@@ -46,8 +224,13 @@ export default function CompliancePage() {
         )}
 
         {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+            </div>
           </div>
         ) : data && (
           <>
@@ -78,80 +261,35 @@ export default function CompliancePage() {
               />
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Overdue Submissions
-                  {data.overdue_submission_count > 0 && (
-                    <Badge variant="danger" size="sm" className="ml-2">{data.overdue_submission_count}</Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.overdue_submissions.length === 0 ? (
-                  <EmptyState
-                    icon={<CheckCircle2 className="h-5 w-5" />}
-                    title="No overdue submissions"
-                    description="All operators are up to date with their submissions."
-                    className="py-8"
-                  />
-                ) : (
-                  <ul className="divide-y divide-border/50">
-                    {data.overdue_submissions.map((s) => (
-                      <li key={s.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                        <Link href={`/operators/${s.operator_external_id}`} className="min-w-0 text-sm font-medium break-words hover:text-primary transition-colors">
-                          {s.operator_name} <span className="font-normal text-muted-foreground">— {s.period}</span>
-                        </Link>
-                        <span className="shrink-0 text-sm text-danger font-medium sm:text-right">
-                          {formatKsh(s.tax_outstanding)} outstanding
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                title="Upcoming Deadlines"
+                value={String(data.calendar_summary.upcoming_deadlines)}
+                icon={<Calendar className="h-5 w-5" />}
+              />
+              <StatCard
+                title="Overdue Filings"
+                value={String(data.calendar_summary.overdue_filings)}
+                icon={<AlertTriangle className="h-5 w-5" />}
+                variant={data.calendar_summary.overdue_filings > 0 ? "danger" : "default"}
+              />
+              <StatCard
+                title="Pending Review"
+                value={String(data.calendar_summary.pending_review)}
+                icon={<Clock className="h-5 w-5" />}
+                variant={data.calendar_summary.pending_review > 0 ? "warning" : "default"}
+              />
+              <StatCard
+                title="Expiring Licences"
+                value={String(data.calendar_summary.expiring_licences)}
+                icon={<FileText className="h-5 w-5" />}
+                variant={data.calendar_summary.expiring_licences > 0 ? "warning" : "default"}
+              />
+            </div>
 
-            <Card>
-              <CardHeader><CardTitle>Operator Compliance Tiers</CardTitle></CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-border bg-secondary/50">
-                      <tr>
-                        {["Operator", "Status", "Tax Outstanding", "Licence"].map((h) => (
-                          <th key={h} className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.operators.map((op) => (
-                        <tr key={op.external_id} className="border-b border-border/50 last:border-0 hover:bg-secondary/30">
-                          <td className="px-5 py-3.5">
-                            <Link href={`/operators/${op.external_id}`} className="font-medium hover:text-primary transition-colors">
-                              {op.trading_name}
-                            </Link>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <Badge variant={complianceBadgeVariant(op.compliance_status)} dot>
-                              {complianceLabel(op.compliance_status)}
-                            </Badge>
-                          </td>
-                          <td className="px-5 py-3.5 tabular-nums">{formatKsh(op.tax_outstanding)}</td>
-                          <td className="px-5 py-3.5">
-                            {op.licence_expiring ? (
-                              <Badge variant="warning" dot>Expiring soon</Badge>
-                            ) : (
-                              <Badge variant="success" dot>Active</Badge>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <ComplianceCalendarSection data={data} />
+            <ComplianceAlertsSection data={data} />
+            <OperatorComplianceTiersTable operators={data.operators} />
           </>
         )}
       </div>

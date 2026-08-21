@@ -68,6 +68,8 @@ export default function TaxEscrowPage() {
 
   if (!user) return null;
 
+  const pendingBatches = summary?.withdrawal_batches.filter((batch) => batch.status === "pending") ?? [];
+
   return (
     <AppShell user={user} title="Tax Escrow">
       <PaymentsNav />
@@ -95,6 +97,44 @@ export default function TaxEscrowPage() {
               variant="warning"
             />
           </div>
+        )}
+
+        {pendingBatches.length > 0 && (
+          <Card className="border-warning/40 bg-warning-subtle/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Pending Withdrawal Batches
+                <Badge variant="warning" size="sm">{pendingBatches.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <TableScroll>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-border bg-secondary/50">
+                    <tr>
+                      {["Business Date", "Total", "Destination", "Status"].map((h) => (
+                        <th key={h} className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingBatches.map((batch) => (
+                      <tr key={batch.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/30">
+                        <td className="px-5 py-3.5">{new Date(batch.business_date).toISOString().slice(0, 10)}</td>
+                        <td className="px-5 py-3.5 tabular-nums font-medium">{formatKsh(batch.total_amount)}</td>
+                        <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{batch.destination_account_ref}</td>
+                        <td className="px-5 py-3.5">
+                          <Badge variant="warning" dot>
+                            Pending
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TableScroll>
+            </CardContent>
+          </Card>
         )}
 
         {canSupervise && (

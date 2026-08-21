@@ -17,6 +17,58 @@ function serializeOperator(operator: Record<string, unknown>) {
   };
 }
 
+function isQuickWarningMetadata(metadata: unknown): boolean {
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as Record<string, unknown>).quick_warning === true
+  );
+}
+
+async function loadEnforcementCounts(
+  prisma: PrismaService["client"],
+  operatorIds: string[],
+) {
+  const openMap = new Map<string, number>();
+  const warningsMap = new Map<string, number>();
+
+  if (operatorIds.length === 0) {
+    return { openMap, warningsMap };
+  }
+
+  const [openCases, warningActions] = await Promise.all([
+    prisma.enforcement_cases.findMany({
+      where: {
+        operator_id: { in: operatorIds },
+        status: { in: ["open", "escalated"] },
+      },
+      select: { operator_id: true, metadata: true },
+    }),
+    prisma.enforcement_actions.findMany({
+      where: {
+        action_type: "warning",
+        case: { operator_id: { in: operatorIds } },
+      },
+      select: { case: { select: { operator_id: true } } },
+    }),
+  ]);
+
+  for (const caseRecord of openCases) {
+    if (isQuickWarningMetadata(caseRecord.metadata)) continue;
+    openMap.set(
+      caseRecord.operator_id,
+      (openMap.get(caseRecord.operator_id) ?? 0) + 1,
+    );
+  }
+
+  for (const action of warningActions) {
+    const operatorId = action.case.operator_id;
+    warningsMap.set(operatorId, (warningsMap.get(operatorId) ?? 0) + 1);
+  }
+
+  return { openMap, warningsMap };
+}
+
 @Injectable()
 export class OperatorsService {
   constructor(
@@ -62,7 +114,17 @@ export class OperatorsService {
       },
     });
 
-    return operators.map((op) => serializeOperator(op as Record<string, unknown>));
+    const operatorIds = operators.map((op) => op.id);
+    const { openMap, warningsMap } = await loadEnforcementCounts(
+      this.prisma.client,
+      operatorIds,
+    );
+
+    return operators.map((op) => ({
+      ...serializeOperator(op as Record<string, unknown>),
+      open_cases_count: openMap.get(op.id) ?? 0,
+      warnings_count: warningsMap.get(op.id) ?? 0,
+    }));
   }
 
   async getByExternalId(externalId: string) {
@@ -98,8 +160,15 @@ export class OperatorsService {
       reporting_period: s.reporting_period,
     }));
 
+    const { openMap, warningsMap } = await loadEnforcementCounts(
+      this.prisma.client,
+      [operator.id],
+    );
+
     return {
       ...serializeOperator(operatorBase as Record<string, unknown>),
+      open_cases_count: openMap.get(operator.id) ?? 0,
+      warnings_count: warningsMap.get(operator.id) ?? 0,
       licences,
       operator_sites,
       monthly_snapshots: snapshots,
@@ -179,15 +248,24 @@ export class OperatorsService {
     if (!operator) throw new NotFoundException(`Operator ${externalId} not found`);
 
     const caseNumber = `ENF-${new Date().getFullYear()}-WARN-${Date.now().toString().slice(-5)}`;
+    const warningDetails = details?.trim() || "Formal warning issued by GRA staff";
     const caseRecord = await this.prisma.client.enforcement_cases.create({
       data: {
         operator_id: operator.id,
         case_number: caseNumber,
         case_type: "warning",
         title: `Formal warning — ${operator.trading_name}`,
-        description: details,
+        description: warningDetails,
+        metadata: {
+          nature: "operational_breach",
+          priority: "medium",
+          requires_operator_response: false,
+          is_internal: false,
+          allegations_summary: warningDetails,
+          quick_warning: true,
+        },
         opened_by: userId,
-        status: "open",
+        status: "resolved",
       },
     });
 
@@ -195,7 +273,7 @@ export class OperatorsService {
       data: {
         enforcement_case_id: caseRecord.id,
         action_type: "warning",
-        details: details ?? "Warning issued by GRA staff",
+        details: warningDetails,
         performed_by: userId,
       },
     });
@@ -212,7 +290,14 @@ export class OperatorsService {
       action: "operator_warning",
       entity_type: "operators",
       entity_id: operator.id,
-      metadata: { external_id: externalId, details },
+      category: "platform",
+      metadata: {
+        summary: `Issued warning to ${operator.trading_name}`,
+        external_id: externalId,
+        operator_name: operator.trading_name,
+        case_number: caseNumber,
+        details: warningDetails,
+      },
     });
 
     return { success: true, case_id: caseRecord.id, case_number: caseNumber };
@@ -256,7 +341,14 @@ export class OperatorsService {
       action: "operator_suspend",
       entity_type: "operators",
       entity_id: operator.id,
-      metadata: { external_id: externalId, details },
+      category: "platform",
+      metadata: {
+        summary: `Suspended ${operator.trading_name}`,
+        external_id: externalId,
+        operator_name: operator.trading_name,
+        case_number: caseNumber,
+        details,
+      },
     });
 
     return { success: true, case_id: caseRecord.id, case_number: caseNumber };

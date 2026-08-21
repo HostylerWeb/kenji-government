@@ -451,12 +451,15 @@ export class PaymentsService {
     }
 
     const title = `AML ${alert.alert_type} — ${alert.operator.trading_name}`;
+    const paymentRef = alert.payment_transaction?.external_transaction_id;
     const description = [
+      `AML alert escalated to enforcement.`,
+      `Alert type: ${alert.alert_type.replace(/_/g, " ")}`,
       `Severity: ${alert.severity}`,
-      alert.payment_transaction
-        ? `Payment ref: ${alert.payment_transaction.external_transaction_id}`
+      paymentRef ? `Payment reference: ${paymentRef}` : null,
+      existingDetails.reason
+        ? `Reason: ${String(existingDetails.reason)}`
         : null,
-      JSON.stringify(alert.details),
     ]
       .filter(Boolean)
       .join("\n");
@@ -468,6 +471,14 @@ export class PaymentsService {
         title,
         description,
         case_type: "investigation",
+        nature: "aml_concern",
+        priority: alert.severity === "high" ? "high" : alert.severity === "medium" ? "medium" : "low",
+        requires_operator_response: true,
+        is_internal: false,
+        required_documents:
+          "Bank statements, source-of-funds documentation, and transaction audit trail for flagged payments.",
+        allegations_summary:
+          `Investigate suspected ${alert.alert_type.replace(/_/g, " ")} activity linked to this operator's payment flow.`,
       },
     );
 

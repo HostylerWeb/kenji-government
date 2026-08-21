@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, Building2 } from "lucide-react";
+import { Search, Building2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge, complianceBadgeVariant, complianceLabel } from "@/components/badge";
 import { Card, CardContent } from "@/components/card";
@@ -11,17 +11,103 @@ import { Tabs } from "@/components/tabs";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonTable } from "@/components/skeleton";
+import { RiskScoreBadge } from "@/components/risk-score-badge";
 import { getDashboardStats, getOperators, type OperatorListItem } from "@/lib/api";
 import { useAuth } from "@/lib/use-auth";
-import { formatKsh } from "@/lib/utils";
+import { formatKsh, cn } from "@/lib/utils";
 
 type ComplianceTab = "compliant" | "at_risk" | "non_compliant";
+type SortKey =
+  | "operator"
+  | "region"
+  | "status"
+  | "annual_ggr"
+  | "tax_due"
+  | "risk"
+  | "open_cases";
+type SortDir = "asc" | "desc";
 
 const COMPLIANCE_TABS: Array<{ id: ComplianceTab; label: string }> = [
   { id: "compliant", label: "Compliant" },
   { id: "at_risk", label: "At Risk" },
   { id: "non_compliant", label: "Non-Compliant" },
 ];
+
+const COMPLIANCE_ORDER: Record<string, number> = {
+  compliant: 0,
+  at_risk: 1,
+  non_compliant: 2,
+};
+
+const NUMERIC_SORT_DEFAULTS: Partial<Record<SortKey, SortDir>> = {
+  annual_ggr: "desc",
+  tax_due: "desc",
+  risk: "desc",
+  open_cases: "desc",
+};
+
+function compareValues(
+  a: OperatorListItem,
+  b: OperatorListItem,
+  key: SortKey,
+): number {
+  switch (key) {
+    case "operator":
+      return a.trading_name.localeCompare(b.trading_name, "en-KE");
+    case "region":
+      return (a.region ?? "").localeCompare(b.region ?? "", "en-KE");
+    case "status":
+      return (
+        (COMPLIANCE_ORDER[a.compliance_status] ?? 99) -
+        (COMPLIANCE_ORDER[b.compliance_status] ?? 99)
+      );
+    case "annual_ggr":
+      return Number(a.annual_ggr ?? 0) - Number(b.annual_ggr ?? 0);
+    case "tax_due":
+      return Number(a.tax_due ?? 0) - Number(b.tax_due ?? 0);
+    case "risk":
+      return a.risk_score - b.risk_score;
+    case "open_cases":
+      return (a.open_cases_count ?? 0) - (b.open_cases_count ?? 0);
+    default:
+      return 0;
+  }
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  direction: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const isActive = activeKey === sortKey;
+  const Icon = !isActive ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <th className={cn("px-5 py-3", className)}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors",
+          isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+      </button>
+    </th>
+  );
+}
 
 export default function OperatorsPage() {
   const { user, token } = useAuth();
@@ -30,8 +116,25 @@ export default function OperatorsPage() {
   const [complianceTab, setComplianceTab] = useState<ComplianceTab>("compliant");
   const [counts, setCounts] = useState({ compliant: 0, at_risk: 0, non_compliant: 0 });
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(NUMERIC_SORT_DEFAULTS[key] ?? "asc");
+  }
+
+  const sortedOperators = useMemo(() => {
+    if (!sortKey) return operators;
+    const sorted = [...operators].sort((a, b) => compareValues(a, b, sortKey));
+    return sortDir === "desc" ? sorted.reverse() : sorted;
+  }, [operators, sortKey, sortDir]);
 
   useEffect(() => {
     const q = searchParams.get("q");
@@ -55,6 +158,7 @@ export default function OperatorsPage() {
     if (!token) return;
     setLoading(true);
     setError("");
+    setSortKey(null);
     getOperators(token, { search: search || undefined, compliance_status: complianceTab })
       .then(setOperators)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load operators"))
@@ -128,16 +232,59 @@ export default function OperatorsPage() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="border-b border-border bg-secondary/50">
                     <tr>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Operator</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Region</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Annual GGR</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tax Due</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Risk</th>
+                      <SortableHeader
+                        label="Operator"
+                        sortKey="operator"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Region"
+                        sortKey="region"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Status"
+                        sortKey="status"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Annual GGR"
+                        sortKey="annual_ggr"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Tax Due"
+                        sortKey="tax_due"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Risk"
+                        sortKey="risk"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Open Cases"
+                        sortKey="open_cases"
+                        activeKey={sortKey}
+                        direction={sortDir}
+                        onSort={handleSort}
+                      />
                     </tr>
                   </thead>
                   <tbody>
-                    {operators.map((op) => (
+                    {sortedOperators.map((op) => (
                       <tr key={op.id} className="border-b border-border/50 last:border-0 transition-colors hover:bg-secondary/30">
                         <td className="px-5 py-3.5">
                           <Link
@@ -157,7 +304,31 @@ export default function OperatorsPage() {
                         <td className="px-5 py-3.5 tabular-nums text-sm">{formatKsh(op.annual_ggr)}</td>
                         <td className="px-5 py-3.5 tabular-nums text-sm">{formatKsh(op.tax_due)}</td>
                         <td className="px-5 py-3.5">
-                          <span className="font-mono text-xs bg-secondary px-2 py-0.5 rounded">{op.risk_score}</span>
+                          <RiskScoreBadge score={op.risk_score} />
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {(op.open_cases_count ?? 0) > 0 ? (
+                            <Link
+                              href={`/operators/${op.external_id}?tab=enforcement`}
+                              className="inline-flex items-center gap-1.5"
+                            >
+                              <Badge variant="danger">{op.open_cases_count}</Badge>
+                              {(op.warnings_count ?? 0) > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  · {op.warnings_count} warning{op.warnings_count === 1 ? "" : "s"}
+                                </span>
+                              )}
+                            </Link>
+                          ) : (op.warnings_count ?? 0) > 0 ? (
+                            <Link
+                              href={`/operators/${op.external_id}?tab=enforcement&enforcement=warnings`}
+                              className="text-sm text-warning hover:underline"
+                            >
+                              {op.warnings_count} warning{op.warnings_count === 1 ? "" : "s"}
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

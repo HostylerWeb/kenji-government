@@ -3,14 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { Card } from "@/components/card";
-import { TableScroll } from "@/components/table-scroll";
+import { Card, CardContent } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
+import { ReportHistoryTable } from "@/components/report-history-table";
 import { useAuth } from "@/lib/use-auth";
-import {
-  getReportRuns,
-  downloadReportRun,
-  type ReportRun,
-} from "@/lib/api";
+import { getReportRuns, downloadReportRun, type ReportRun } from "@/lib/api";
 
 export default function ReportHistoryPage() {
   const { user, token } = useAuth();
@@ -27,70 +24,40 @@ export default function ReportHistoryPage() {
   if (!user) return null;
 
   return (
-    <AppShell
-      user={user}
-      title="Report History"
-      breadcrumbs={[
-        { label: "Reports", href: "/reports" },
-        { label: "History" },
-      ]}
-    >
+    <AppShell user={user} title="Report History">
+      <PageHeader
+        title="Report History"
+        subtitle="Past exports — sort columns to find runs quickly"
+        breadcrumbs={[
+          { label: "Reports", href: "/reports" },
+          { label: "History" },
+        ]}
+      />
+
       {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-danger">{error}</p>
+        <p className="mb-4 rounded-lg border border-danger/30 bg-danger-subtle px-4 py-3 text-sm text-danger">
+          {error}
+        </p>
       )}
 
       <Card>
-        {runs.length === 0 ? (
-          <p className="text-sm text-muted">No report runs yet.</p>
-        ) : (
-          <TableScroll>
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted">
-                <th className="py-2 pr-4">Report</th>
-                <th className="py-2 pr-4">Format</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Requested by</th>
-                <th className="py-2 pr-4">When</th>
-                <th className="py-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <tr key={run.id} className="border-b border-border/60">
-                  <td className="py-3 pr-4">
-                    <Link href={`/reports/${run.slug}`} className="hover:text-primary">
-                      {run.title}
-                    </Link>
-                    {run.is_scheduled && (
-                      <span className="ml-2 text-xs text-muted">scheduled</span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 uppercase">{run.format}</td>
-                  <td className="py-3 pr-4 capitalize">{run.status}</td>
-                  <td className="py-3 pr-4">
-                    {run.requested_by?.full_name ?? "System"}
-                  </td>
-                  <td className="py-3 pr-4 text-muted">
-                    {new Date(run.created_at).toLocaleString("en-KE")}
-                  </td>
-                  <td className="py-3">
-                    {run.status === "completed" && token && (
-                      <button
-                        type="button"
-                        onClick={() => downloadReportRun(token, run.id)}
-                        className="text-primary hover:underline"
-                      >
-                        Download
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </TableScroll>
-        )}
+        <CardContent className="py-4">
+          {runs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No report runs yet.{" "}
+              <Link href="/reports" className="text-primary hover:underline">
+                Explore reports
+              </Link>
+            </p>
+          ) : (
+            <ReportHistoryTable
+              runs={runs}
+              onDownload={(runId) => {
+                if (token) downloadReportRun(token, runId);
+              }}
+            />
+          )}
+        </CardContent>
       </Card>
     </AppShell>
   );

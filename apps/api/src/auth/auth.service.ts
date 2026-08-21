@@ -10,6 +10,7 @@ import type {
   LoginResponse,
   SecurityPreferences,
   SecurityPreferencesInput,
+  UpdateProfileInput,
 } from "@kenji-government/shared";
 import {
   AUTH_EMAIL_OTP_DISABLED_MESSAGE,
@@ -322,12 +323,73 @@ export class AuthService {
     }
   }
 
+  async getProfile(userId: string): Promise<AuthUser> {
+    const user = await this.prisma.client.users.findUnique({
+      where: { id: userId },
+    });
+    if (!user || !user.is_active) {
+      throw new UnauthorizedException("User not found");
+    }
+    return this.mfa.toAuthUser(user);
+  }
+
+  async updateProfile(
+    userId: string,
+    input: UpdateProfileInput,
+  ): Promise<AuthUser> {
+    const user = await this.prisma.client.users.findUnique({
+      where: { id: userId },
+    });
+    if (!user || !user.is_active) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    const data: { full_name?: string; password_hash?: string } = {};
+
+    if (input.full_name !== undefined) {
+      data.full_name = input.full_name.trim();
+    }
+
+    if (input.new_password) {
+      const valid = await bcrypt.compare(
+        input.current_password!,
+        user.password_hash,
+      );
+      if (!valid) {
+        throw new UnauthorizedException("Current password is incorrect");
+      }
+      data.password_hash = await bcrypt.hash(input.new_password, 12);
+    }
+
+    const updated = await this.prisma.client.users.update({
+      where: { id: userId },
+      data,
+    });
+
+    await this.auditService.log({
+      user_id: userId,
+      action: input.new_password ? "profile_password_changed" : "profile_updated",
+      entity_type: "users",
+      entity_id: userId,
+      category: "auth",
+      metadata: {
+        summary: input.new_password
+          ? "Changed account password"
+          : "Updated profile details",
+      },
+    });
+
+    return this.mfa.toAuthUser(updated);
+  }
+
   async logout(userId: string) {
     await this.auditService.log({
       user_id: userId,
       action: "logout",
       entity_type: "users",
       entity_id: userId,
+      category: "auth",
+      metadata: { summary: "Signed out of the platform" },
     });
     return { success: true };
   }
@@ -376,6 +438,8 @@ export class AuthService {
       action: "login",
       entity_type: "users",
       entity_id: user.id,
+      category: "auth",
+      metadata: { summary: `Signed in as ${user.full_name}` },
     });
 
     return { ...tokens, user: resolvedUser };

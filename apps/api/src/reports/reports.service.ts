@@ -10,6 +10,7 @@ import { roleMeetsMinimum } from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { ReportsQueueService } from "./reports-queue.service";
+import { ReportDataService } from "./report-data.service";
 
 @Injectable()
 export class ReportsService {
@@ -17,6 +18,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly queue: ReportsQueueService,
+    private readonly reportData: ReportDataService,
   ) {}
 
   async listDefinitions(user: AuthUser) {
@@ -51,6 +53,62 @@ export class ReportsService {
       throw new ForbiddenException("Insufficient role for this report");
     }
     return this.toDefinitionDto(row);
+  }
+
+  async previewReport(
+    slug: string,
+    user: AuthUser,
+    query: Record<string, string | undefined>,
+  ) {
+    const definition = await this.getDefinition(slug, user);
+    const parameters = this.parseParameters(
+      definition as {
+        parameters_schema: {
+          fields?: Array<{
+            name: string;
+            type: string;
+            default?: string | number;
+          }>;
+        };
+      },
+      query,
+    );
+    const preview = await this.reportData.preview(slug, parameters);
+    return {
+      slug: definition.slug,
+      category: definition.category,
+      preview,
+    };
+  }
+
+  private parseParameters(
+    definition: {
+      parameters_schema: {
+        fields?: Array<{
+          name: string;
+          type: string;
+          default?: string | number;
+        }>;
+      };
+    },
+    query: Record<string, string | undefined>,
+  ): Record<string, unknown> {
+    const parameters: Record<string, unknown> = {};
+    for (const field of definition.parameters_schema.fields ?? []) {
+      const raw = query[field.name];
+      if (raw !== undefined && raw !== "") {
+        parameters[field.name] =
+          field.type === "number" ? Number(raw) : raw;
+      } else if (field.default !== undefined) {
+        parameters[field.name] = field.default;
+      }
+    }
+
+    if (query.date && !parameters.date) {
+      parameters.date = query.date;
+    }
+
+    return parameters;
   }
 
   async runReport(

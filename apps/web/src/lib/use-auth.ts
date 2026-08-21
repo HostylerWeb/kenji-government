@@ -57,5 +57,14 @@ export function useAuth() {
     };
   }, [router]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<AuthUser>).detail;
+      if (detail) setUser(detail);
+    };
+    window.addEventListener("gra-auth-updated", handler);
+    return () => window.removeEventListener("gra-auth-updated", handler);
+  }, []);
+
   return { user, token, ready };
 }

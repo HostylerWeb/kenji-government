@@ -22,9 +22,13 @@ export class RegionalService {
     const heatmap = await this.getNationalHeatmap(since);
     const stakeBands = await this.getNationalStakeBands(since);
     const ageBands = await this.getNationalAgeBands(since);
+    const countyPerformance = await this.buildCountyPerformance(counties, days);
+    const nationalSummary = await this.getNationalSummary(days, counties, countyPerformance);
 
     return {
       days,
+      national_summary: nationalSummary,
+      county_performance: countyPerformance,
       counties,
       play_safe_by_county: safety.play_safe_by_county,
       self_exclusion_by_county: safety.self_exclusion_by_county,
@@ -95,6 +99,8 @@ export class RegionalService {
       0,
     );
 
+    const growth = await this.getCountyGrowthMetrics(normalizedCounty, days);
+
     return {
       county: normalizedCounty,
       days,
@@ -104,6 +110,13 @@ export class RegionalService {
       play_safe_activations: playSafeTotal,
       self_exclusion_requests: selfExclusionTotal,
       session_count: sessionTotal,
+      sessions_change_pct: growth.sessions_change_pct,
+      sessions_ytd_change_pct: growth.sessions_ytd_change_pct,
+      play_safe_change_pct: growth.play_safe_change_pct,
+      self_exclusion_change_pct: growth.self_exclusion_change_pct,
+      ggr_ytd: growth.ggr_ytd,
+      ggr_ytd_change_pct: growth.ggr_ytd_change_pct,
+      ggr_ytd_change_label: growth.ggr_ytd_change_label,
       peak_time_heatmap: heatmap,
       stake_band_distribution: stakeBands,
       age_band_distribution: ageBands,
@@ -192,6 +205,329 @@ export class RegionalService {
       mime_type: "text/csv",
       buffer: Buffer.from(lines.join("\n"), "utf-8"),
     };
+  }
+
+  private percentChange(previous: number, current: number): number | null {
+    if (previous === 0 && current === 0) return 0;
+    if (previous === 0) return null;
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  }
+
+  private async sumSessions(from: Date, to?: Date, county?: string) {
+    const where: Prisma.player_safety_aggregatesWhereInput = {
+      bucket_date: to ? { gte: from, lt: to } : { gte: from },
+    };
+    if (county) where.county = county;
+    const result = await this.prisma.client.player_safety_aggregates.aggregate({
+      where,
+      _sum: { session_count: true },
+    });
+    return Number(result._sum.session_count ?? 0);
+  }
+
+  private async getGgrGrowthSummary(county?: string) {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth() + 1;
+
+    const [ggrYtd, ggrYtdPrior, ggrRecent, ggrRecentPrior] = await Promise.all([
+      this.sumSnapshotGgr({ year, monthFrom: 1, monthTo: month, county }),
+      this.sumSnapshotGgr({ year: year - 1, monthFrom: 1, monthTo: month, county }),
+      this.sumSnapshotGgrForRecentMonths(3, county),
+      this.sumSnapshotGgrForRecentMonths(3, county, 3),
+    ]);
+
+    return {
+      ggr_ytd: ggrYtd,
+      ggr_ytd_change_pct: this.percentChange(ggrYtdPrior, ggrYtd),
+      ggr_ytd_change_label: "YTD vs same period last year",
+      ggr_recent_change_pct: this.percentChange(ggrRecentPrior, ggrRecent),
+      ggr_recent_change_label: "vs prior 3 reporting months",
+    };
+  }
+
+  private async getCountyGrowthMetrics(county: string, days: number) {
+    const now = new Date();
+    const currentSince = this.daysAgo(days);
+    const priorSince = this.daysAgo(days * 2);
+    const ytdStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const priorYtdStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
+    const priorYtdEnd = new Date(
+      Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate() + 1),
+    );
+
+    const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
+      where: {
+        county,
+        bucket_date: { gte: priorSince },
+      },
+      select: {
+        bucket_date: true,
+        session_count: true,
+        play_safe_activations: true,
+        self_exclusion_requests: true,
+      },
+    });
+
+    let currentSessions = 0;
+    let priorSessions = 0;
+    let currentPlaySafe = 0;
+    let priorPlaySafe = 0;
+    let currentSelfExclusion = 0;
+    let priorSelfExclusion = 0;
+
+    for (const row of aggregates) {
+      const isCurrent = row.bucket_date >= currentSince;
+      const sessions = Number(row.session_count);
+      const playSafe = Number(row.play_safe_activations);
+      const selfExclusion = Number(row.self_exclusion_requests);
+      if (isCurrent) {
+        currentSessions += sessions;
+        currentPlaySafe += playSafe;
+        currentSelfExclusion += selfExclusion;
+      } else {
+        priorSessions += sessions;
+        priorPlaySafe += playSafe;
+        priorSelfExclusion += selfExclusion;
+      }
+    }
+
+    const [ytdSessions, priorYtdSessions, ggrGrowth] = await Promise.all([
+      this.sumSessions(ytdStart, undefined, county),
+      this.sumSessions(priorYtdStart, priorYtdEnd, county),
+      this.getGgrGrowthSummary(county),
+    ]);
+
+    return {
+      sessions_change_pct: this.percentChange(priorSessions, currentSessions),
+      sessions_ytd_change_pct: this.percentChange(priorYtdSessions, ytdSessions),
+      play_safe_change_pct: this.percentChange(priorPlaySafe, currentPlaySafe),
+      self_exclusion_change_pct: this.percentChange(
+        priorSelfExclusion,
+        currentSelfExclusion,
+      ),
+      ggr_ytd: ggrGrowth.ggr_ytd,
+      ggr_ytd_change_pct: ggrGrowth.ggr_ytd_change_pct,
+      ggr_ytd_change_label: ggrGrowth.ggr_ytd_change_label,
+    };
+  }
+
+  private async sumSnapshotGgr(params: {
+    year: number;
+    monthFrom: number;
+    monthTo: number;
+    county?: string;
+  }) {
+    const snapshots = await this.prisma.client.operator_monthly_snapshots.findMany({
+      where: {
+        reporting_period: {
+          year: params.year,
+          month: { gte: params.monthFrom, lte: params.monthTo },
+        },
+        ...(params.county
+          ? { operator: { county: params.county, status: "active" } }
+          : { operator: { status: "active" } }),
+      },
+      select: { gross_gaming_revenue: true },
+    });
+
+    return snapshots.reduce(
+      (sum, row) => sum + Number(row.gross_gaming_revenue),
+      0,
+    );
+  }
+
+  private async sumSnapshotGgrForRecentMonths(
+    count: number,
+    county?: string,
+    skip = 0,
+  ) {
+    const periods = await this.prisma.client.reporting_periods.findMany({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      take: count + skip,
+    });
+    const selected = periods.slice(skip, skip + count);
+    if (selected.length === 0) return 0;
+
+    const snapshots = await this.prisma.client.operator_monthly_snapshots.findMany({
+      where: {
+        reporting_period_id: { in: selected.map((period) => period.id) },
+        ...(county
+          ? { operator: { county, status: "active" } }
+          : { operator: { status: "active" } }),
+      },
+      select: { gross_gaming_revenue: true },
+    });
+
+    return snapshots.reduce(
+      (sum, row) => sum + Number(row.gross_gaming_revenue),
+      0,
+    );
+  }
+
+  private async getNationalSummary(
+    days: number,
+    counties: Array<{ county: string; annual_ggr: number }>,
+    countyPerformance: Array<{
+      county: string;
+      sessions_change_pct: number | null;
+    }>,
+  ) {
+    const now = new Date();
+    const currentSince = this.daysAgo(days);
+    const priorSince = this.daysAgo(days * 2);
+
+    const ytdStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const priorYtdStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
+    const priorYtdEnd = new Date(
+      Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate() + 1),
+    );
+
+    const [currentSessions, priorSessions, ytdSessions, priorYtdSessions, ggrGrowth] =
+      await Promise.all([
+        this.sumSessions(currentSince),
+        this.sumSessions(priorSince, currentSince),
+        this.sumSessions(ytdStart),
+        this.sumSessions(priorYtdStart, priorYtdEnd),
+        this.getGgrGrowthSummary(),
+      ]);
+
+    const totalGgr = counties.reduce((sum, row) => sum + row.annual_ggr, 0);
+    const activeCounties = counties.filter((row) => row.county !== "Unknown").length;
+
+    const highestGrowth = [...countyPerformance]
+      .filter((row) => row.sessions_change_pct !== null)
+      .sort((a, b) => (b.sessions_change_pct ?? 0) - (a.sessions_change_pct ?? 0))[0];
+
+    return {
+      total_sessions: currentSessions,
+      sessions_change_pct: this.percentChange(priorSessions, currentSessions),
+      sessions_change_label: `vs prior ${days} days`,
+      total_sessions_ytd: ytdSessions,
+      sessions_ytd_change_pct: this.percentChange(priorYtdSessions, ytdSessions),
+      sessions_ytd_change_label: "YTD vs same period last year",
+      total_annual_ggr: totalGgr,
+      ggr_ytd: ggrGrowth.ggr_ytd,
+      ggr_ytd_change_pct: ggrGrowth.ggr_ytd_change_pct,
+      ggr_ytd_change_label: ggrGrowth.ggr_ytd_change_label,
+      ggr_recent_change_pct: ggrGrowth.ggr_recent_change_pct,
+      ggr_recent_change_label: ggrGrowth.ggr_recent_change_label,
+      active_counties: activeCounties,
+      total_counties: 47,
+      highest_growth_county: highestGrowth
+        ? {
+            county: highestGrowth.county,
+            change_pct: highestGrowth.sessions_change_pct,
+            metric: "player sessions",
+          }
+        : null,
+    };
+  }
+
+  private async buildCountyPerformance(
+    commercial: Array<{
+      county: string;
+      region: string | null;
+      operator_count: number;
+      annual_ggr: number;
+    }>,
+    days: number,
+  ) {
+    const currentSince = this.daysAgo(days);
+    const priorSince = this.daysAgo(days * 2);
+
+    const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
+      where: { bucket_date: { gte: priorSince } },
+      select: {
+        county: true,
+        bucket_date: true,
+        session_count: true,
+        play_safe_activations: true,
+      },
+    });
+
+    const currentByCounty = new Map<string, { sessions: number; play_safe: number }>();
+    const priorByCounty = new Map<string, { sessions: number; play_safe: number }>();
+
+    for (const row of aggregates) {
+      const target =
+        row.bucket_date >= currentSince ? currentByCounty : priorByCounty;
+      const entry = target.get(row.county) ?? { sessions: 0, play_safe: 0 };
+      entry.sessions += Number(row.session_count);
+      entry.play_safe += Number(row.play_safe_activations);
+      target.set(row.county, entry);
+    }
+
+    const ggrChangeByCounty = await this.getCountyGgrYtdChanges();
+
+    return commercial
+      .map((row) => {
+        const current = currentByCounty.get(row.county) ?? {
+          sessions: 0,
+          play_safe: 0,
+        };
+        const prior = priorByCounty.get(row.county) ?? { sessions: 0, play_safe: 0 };
+        const ggrChange = ggrChangeByCounty.get(row.county);
+        return {
+          county: row.county,
+          region: row.region,
+          operator_count: row.operator_count,
+          annual_ggr: row.annual_ggr,
+          sessions: current.sessions,
+          play_safe: current.play_safe,
+          sessions_change_pct: this.percentChange(prior.sessions, current.sessions),
+          play_safe_change_pct: this.percentChange(prior.play_safe, current.play_safe),
+          ggr_ytd_change_pct: ggrChange?.change_pct ?? null,
+        };
+      })
+      .sort((a, b) => b.annual_ggr - a.annual_ggr);
+  }
+
+  private async getCountyGgrYtdChanges() {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth() + 1;
+
+    const snapshots = await this.prisma.client.operator_monthly_snapshots.findMany({
+      where: {
+        reporting_period: {
+          OR: [
+            { year, month: { gte: 1, lte: month } },
+            { year: year - 1, month: { gte: 1, lte: month } },
+          ],
+        },
+        operator: { status: "active" },
+      },
+      select: {
+        gross_gaming_revenue: true,
+        operator: { select: { county: true } },
+        reporting_period: { select: { year: true } },
+      },
+    });
+
+    const currentByCounty = new Map<string, number>();
+    const priorByCounty = new Map<string, number>();
+
+    for (const row of snapshots) {
+      const county = row.operator.county ?? "Unknown";
+      const target =
+        row.reporting_period.year === year ? currentByCounty : priorByCounty;
+      target.set(
+        county,
+        (target.get(county) ?? 0) + Number(row.gross_gaming_revenue),
+      );
+    }
+
+    const result = new Map<string, { change_pct: number | null }>();
+    for (const county of new Set([...currentByCounty.keys(), ...priorByCounty.keys()])) {
+      result.set(county, {
+        change_pct: this.percentChange(
+          priorByCounty.get(county) ?? 0,
+          currentByCounty.get(county) ?? 0,
+        ),
+      });
+    }
+    return result;
   }
 
   private async getCountyCommercial() {

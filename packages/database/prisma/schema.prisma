@@ -133,6 +133,8 @@ enum document_type {
   tax_certificate
   audit_report
   insurance
+  monthly_return
+  bank_statement
   other
 }
 
@@ -346,6 +348,7 @@ model submissions {
   operator          operators         @relation(fields: [operator_id], references: [id], onDelete: Cascade)
   reporting_period  reporting_periods @relation(fields: [reporting_period_id], references: [id])
   reviewer          users?            @relation("submission_reviewer", fields: [reviewed_by], references: [id])
+  documents           documents[]
 
   @@index([operator_id])
   @@index([status])
@@ -392,6 +395,7 @@ model enforcement_cases {
   title       String
   description String?
   status      enforcement_case_status @default(open)
+  metadata    Json                    @default("{}")
   opened_by   String?                 @db.Uuid
   resolved_at DateTime?               @db.Timestamptz(6)
   created_at  DateTime                @default(now()) @db.Timestamptz(6)
@@ -421,6 +425,7 @@ model enforcement_actions {
 model documents {
   id            String        @id @default(uuid()) @db.Uuid
   operator_id   String        @db.Uuid
+  submission_id String?       @db.Uuid
   document_type document_type
   title         String
   file_path     String
@@ -430,10 +435,12 @@ model documents {
   uploaded_at   DateTime      @default(now()) @db.Timestamptz(6)
   created_at    DateTime      @default(now()) @db.Timestamptz(6)
 
-  operator operators @relation(fields: [operator_id], references: [id], onDelete: Cascade)
-  uploader users?    @relation(fields: [uploaded_by], references: [id])
+  operator   operators    @relation(fields: [operator_id], references: [id], onDelete: Cascade)
+  submission submissions? @relation(fields: [submission_id], references: [id], onDelete: SetNull)
+  uploader   users?       @relation(fields: [uploaded_by], references: [id])
 
   @@index([operator_id])
+  @@index([submission_id])
 }
 
 model operator_monthly_snapshots {

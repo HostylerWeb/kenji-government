@@ -100,3 +100,33 @@ export interface SecurityPreferences {
   google_authenticator_enabled: boolean;
   email_otp_new_device_enabled: boolean;
 }
+
+export const updateProfileSchema = z
+  .object({
+    full_name: z.string().trim().min(2).max(120).optional(),
+    current_password: z.string().min(8).optional(),
+    new_password: z.string().min(8).optional(),
+  })
+  .refine(
+    (data) => {
+      const changingPassword = Boolean(
+        data.current_password || data.new_password,
+      );
+      if (changingPassword) {
+        return Boolean(data.current_password && data.new_password);
+      }
+      return true;
+    },
+    {
+      message: "Both current and new password are required to change password",
+      path: ["new_password"],
+    },
+  )
+  .refine(
+    (data) => Boolean(data.full_name) || Boolean(data.new_password),
+    {
+      message: "Provide a name or new password to update",
+    },
+  );
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

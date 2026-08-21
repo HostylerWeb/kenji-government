@@ -92,7 +92,12 @@ export class IngestService {
   async uploadDocument(
     site: IngestSiteContext,
     idempotencyKey: string,
-    meta: { title: string; document_type: string },
+    meta: {
+      title: string;
+      document_type: string;
+      reporting_year?: number;
+      reporting_month?: number;
+    },
     file: { filename: string; mimetype: string; buffer: Buffer },
   ) {
     const docType = ingestDocumentTypeSchema.safeParse(meta.document_type);
@@ -122,6 +127,9 @@ export class IngestService {
           document_id: document.id,
           title: meta.title,
           document_type: meta.document_type,
+          submission_id: document.submission_id,
+          reporting_year: meta.reporting_year,
+          reporting_month: meta.reporting_month,
         },
         status: "processed",
         processed_at: new Date(),

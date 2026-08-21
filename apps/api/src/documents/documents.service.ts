@@ -5,12 +5,14 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { AuditService } from "../audit/audit.service";
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly auditService: AuditService,
   ) {}
 
   private async getOperatorId(externalId: string) {
@@ -51,10 +53,47 @@ export class DocumentsService {
 
   async uploadFromIngest(
     externalId: string,
-    meta: { title: string; document_type: string },
+    meta: {
+      title: string;
+      document_type: string;
+      reporting_year?: number;
+      reporting_month?: number;
+    },
     file: { filename: string; mimetype: string; buffer: Buffer },
   ) {
-    return this.uploadFile(externalId, meta, file, null);
+    const submissionId = await this.resolveSubmissionId(
+      externalId,
+      meta.reporting_year,
+      meta.reporting_month,
+    );
+    return this.uploadFile(externalId, meta, file, null, submissionId);
+  }
+
+  private async resolveSubmissionId(
+    externalId: string,
+    reportingYear?: number,
+    reportingMonth?: number,
+  ): Promise<string | null> {
+    if (!reportingYear || !reportingMonth) return null;
+
+    const operator = await this.prisma.client.operators.findUnique({
+      where: { external_id: externalId },
+      select: { id: true },
+    });
+    if (!operator) return null;
+
+    const submission = await this.prisma.client.submissions.findFirst({
+      where: {
+        operator_id: operator.id,
+        reporting_period: {
+          year: reportingYear,
+          month: reportingMonth,
+        },
+      },
+      select: { id: true },
+    });
+
+    return submission?.id ?? null;
   }
 
   private async uploadFile(
@@ -62,6 +101,7 @@ export class DocumentsService {
     meta: { title: string; document_type: string },
     file: { filename: string; mimetype: string; buffer: Buffer },
     uploaderId: string | null,
+    submissionId: string | null = null,
   ) {
     if (!file?.buffer?.length) {
       throw new BadRequestException("File is required");
@@ -76,6 +116,7 @@ export class DocumentsService {
     const document = await this.prisma.client.documents.create({
       data: {
         operator_id: operatorId,
+        submission_id: submissionId,
         document_type: meta.document_type as never,
         title: meta.title,
         file_path: relativePath,
@@ -85,8 +126,26 @@ export class DocumentsService {
       },
       include: {
         uploader: { select: { id: true, full_name: true } },
+        operator: { select: { external_id: true, trading_name: true } },
       },
     });
+
+    if (uploaderId) {
+      await this.auditService.log({
+        user_id: uploaderId,
+        action: "document_uploaded",
+        entity_type: "documents",
+        entity_id: document.id,
+        category: "platform",
+        metadata: {
+          summary: `Uploaded ${meta.title} for ${document.operator.trading_name}`,
+          title: meta.title,
+          document_type: meta.document_type,
+          external_id: document.operator.external_id,
+          operator_name: document.operator.trading_name,
+        },
+      });
+    }
 
     return {
       ...document,

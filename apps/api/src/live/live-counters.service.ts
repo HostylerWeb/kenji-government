@@ -27,6 +27,10 @@ export class LiveCountersService {
     return `${COUNTERS_PREFIX}:operator:${externalId}:revenue:${date}`;
   }
 
+  private operatorGatewayPaymentsKey(externalId: string, date: string) {
+    return `${COUNTERS_PREFIX}:operator:${externalId}:gateway_payments:${date}`;
+  }
+
   async recordTicketPurchase(externalId: string, amount: number) {
     const date = this.todayKey();
     const client = this.redis.getClient();
@@ -62,6 +66,20 @@ export class LiveCountersService {
     await client.incrby(`${COUNTERS_PREFIX}:global:tax:${date}`, amountCents);
   }
 
+  async recordGatewayPaymentCompleted(operatorExternalId: string, grossAmount: number) {
+    const date = this.todayKey();
+    const client = this.redis.getClient();
+    const amountCents = Math.round(grossAmount * 100);
+
+    await client
+      .multi()
+      .incr(`${COUNTERS_PREFIX}:global:gateway_payments:${date}`)
+      .incr(this.operatorGatewayPaymentsKey(operatorExternalId, date))
+      .incrby(this.globalRevenueKey(date), amountCents)
+      .incrby(this.operatorRevenueKey(operatorExternalId, date), amountCents)
+      .exec();
+  }
+
   async recordGatewayPayment() {
     const date = this.todayKey();
     const client = this.redis.getClient();
@@ -79,11 +97,15 @@ export class LiveCountersService {
       ? this.operatorRevenueKey(operatorExternalId, date)
       : this.globalRevenueKey(date);
 
+    const paymentsKey = operatorExternalId
+      ? this.operatorGatewayPaymentsKey(operatorExternalId, date)
+      : `${COUNTERS_PREFIX}:global:gateway_payments:${date}`;
+
     const [ticketsRaw, revenueCentsRaw, taxCentsRaw, paymentsRaw] = await client.mget(
       ticketsKey,
       revenueKey,
       `${COUNTERS_PREFIX}:global:tax:${date}`,
-      `${COUNTERS_PREFIX}:global:gateway_payments:${date}`,
+      paymentsKey,
     );
     const tickets = Math.max(0, Number(ticketsRaw ?? 0));
     const revenueCents = Math.max(0, Number(revenueCentsRaw ?? 0));

@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { LIVE_REDIS_CHANNELS, type LiveFeedEvent } from "@kenji-government/shared";
+import { LIVE_REDIS_CHANNELS, type LiveFeedEvent, isImportantLiveEvent } from "@kenji-government/shared";
 import { RedisService } from "../redis/redis.service";
 import Redis from "ioredis";
 
@@ -38,6 +38,7 @@ export class LivePubSubService implements OnModuleDestroy {
       if (channel !== LIVE_REDIS_CHANNELS.ALL) return;
       try {
         const event = JSON.parse(message) as LiveFeedEvent;
+        if (!isImportantLiveEvent(event.event_type)) return;
         if (
           operatorExternalId &&
           event.operator_external_id !== operatorExternalId

@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import {
-  clearAuth,
+  forceLogout,
+  isAccessTokenExpired,
   SESSION_IDLE_MS,
   touchSessionActivity,
 } from "@/lib/auth";
@@ -32,13 +33,18 @@ export function SessionIdleMonitor() {
     }
 
     const interval = window.setInterval(() => {
+      const accessToken = localStorage.getItem("gra_access_token");
+      if (accessToken && isAccessTokenExpired(accessToken)) {
+        forceLogout("expired");
+        return;
+      }
+
       const raw = localStorage.getItem("gra_last_activity");
       if (!raw) return;
       const last = Number(raw);
       if (!Number.isFinite(last)) return;
       if (Date.now() - last > SESSION_IDLE_MS) {
-        clearAuth();
-        window.location.href = "/login?reason=idle";
+        forceLogout("idle");
       }
     }, 60000);
 

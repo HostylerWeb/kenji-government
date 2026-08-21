@@ -514,19 +514,63 @@ async function main() {
             : null,
       };
 
+      let submissionId: string;
+
       if (existingSubmission) {
-        await prisma.submissions.update({
+        const updated = await prisma.submissions.update({
           where: { id: existingSubmission.id },
           data: submissionData,
         });
+        submissionId = updated.id;
       } else {
-        await prisma.submissions.create({
+        const created = await prisma.submissions.create({
           data: {
             operator_id: operator.id,
             reporting_period_id: period.id,
             ...submissionData,
           },
         });
+        submissionId = created.id;
+      }
+
+      if (
+        submissionStatus === "pending" ||
+        submissionStatus === "revision_requested"
+      ) {
+        const periodSlug = period.label.replace(/\s+/g, "_");
+        const supportingDocs = [
+          {
+            type: "monthly_return" as const,
+            title: `Monthly_Return_${periodSlug}.pdf`,
+          },
+          {
+            type: "bank_statement" as const,
+            title: `Bank_Statement_${periodSlug}.pdf`,
+          },
+        ];
+
+        for (const doc of supportingDocs) {
+          const existingSupporting = await prisma.documents.findFirst({
+            where: {
+              submission_id: submissionId,
+              document_type: doc.type,
+            },
+          });
+          if (!existingSupporting) {
+            await prisma.documents.create({
+              data: {
+                operator_id: operator.id,
+                submission_id: submissionId,
+                document_type: doc.type,
+                title: doc.title,
+                file_path: `documents/${op.external_id}/${doc.type}-${period.year}-${period.month}.pdf`,
+                file_size: BigInt(312000),
+                mime_type: "application/pdf",
+                uploaded_by: adminUserId,
+              },
+            });
+          }
+        }
       }
     }
 
@@ -564,6 +608,15 @@ async function main() {
       case_type: "investigation" as const,
       title: "Late tax remittance — Highland Raffles",
       description: "Operator failed to remit Q1 tax within statutory deadline.",
+      metadata: {
+        nature: "tax_non_compliance",
+        priority: "high",
+        requires_operator_response: true,
+        is_internal: false,
+        required_documents: "Q1 tax return, remittance proof, and bank transfer records.",
+        allegations_summary:
+          "Operator failed to remit Q1 tax within the statutory deadline and has not provided a satisfactory explanation.",
+      },
     },
     {
       external_id: "op-006",
@@ -571,6 +624,15 @@ async function main() {
       case_type: "warning" as const,
       title: "Submission quality review — Nairobi Night Wins",
       description: "Repeated discrepancies in monthly GGR reporting.",
+      metadata: {
+        nature: "inaccurate_reporting",
+        priority: "medium",
+        requires_operator_response: true,
+        is_internal: false,
+        required_documents: "Corrected monthly return and supporting GGR audit trail.",
+        allegations_summary:
+          "Repeated discrepancies were identified between reported GGR and supporting transaction data.",
+      },
     },
     {
       external_id: "op-008",
@@ -578,6 +640,15 @@ async function main() {
       case_type: "fine" as const,
       title: "Tax arrears — Coastal Fortune",
       description: "Significant tax outstanding exceeding 60 days.",
+      metadata: {
+        nature: "tax_non_compliance",
+        priority: "high",
+        requires_operator_response: true,
+        is_internal: false,
+        required_documents: "Outstanding tax schedule and payment plan proposal.",
+        allegations_summary:
+          "Significant tax arrears remain outstanding beyond 60 days without an approved payment plan.",
+      },
     },
     {
       external_id: "op-014",
@@ -585,6 +656,14 @@ async function main() {
       case_type: "warning" as const,
       title: "Compliance monitoring — Mombasa Mega Wins",
       description: "At-risk compliance tier; increased monitoring required.",
+      metadata: {
+        nature: "internal_review",
+        priority: "medium",
+        requires_operator_response: false,
+        is_internal: true,
+        allegations_summary:
+          "Operator moved to at-risk compliance tier; internal monitoring review initiated.",
+      },
     },
   ];
 
@@ -597,6 +676,7 @@ async function main() {
       update: {
         title: item.title,
         description: item.description,
+        metadata: item.metadata,
         status: "open",
       },
       create: {
@@ -605,6 +685,7 @@ async function main() {
         case_type: item.case_type,
         title: item.title,
         description: item.description,
+        metadata: item.metadata,
         status: "open",
         opened_by: adminUserId,
       },
@@ -625,6 +706,79 @@ async function main() {
           performed_by: adminUserId,
         },
       });
+    }
+  }
+
+  console.log("Seeding audit log samples...");
+  const op003Id = operatorIds["op-003"];
+  const op006Id = operatorIds["op-006"];
+  const auditSamples = [
+    {
+      user_id: adminUserId,
+      action: "login",
+      entity_type: "users",
+      entity_id: adminUserId,
+      metadata: {
+        category: "auth",
+        summary: "Signed in as GRA Super Administrator",
+      },
+    },
+    {
+      user_id: adminUserId,
+      action: "enforcement_case_created",
+      entity_type: "enforcement_cases",
+      entity_id: op003Id,
+      metadata: {
+        category: "platform",
+        summary: "Opened ENF-2026-001 — Late tax remittance — Highland Raffles",
+        case_number: "ENF-2026-001",
+        external_id: "op-003",
+        operator_name: "Highland Raffles",
+      },
+    },
+    {
+      user_id: adminUserId,
+      action: "operator_warning",
+      entity_type: "operators",
+      entity_id: op006Id,
+      metadata: {
+        category: "platform",
+        summary: "Issued warning to Nairobi Night Wins",
+        external_id: "op-006",
+        operator_name: "Nairobi Night Wins",
+        details: "Repeated discrepancies in monthly GGR reporting.",
+      },
+    },
+    {
+      user_id: adminUserId,
+      action: "submission_approved",
+      entity_type: "submissions",
+      metadata: {
+        category: "platform",
+        summary: "Approved submission for Safari Jackpot (July 2026)",
+        external_id: "op-001",
+        operator_name: "Safari Jackpot",
+        status: "approved",
+      },
+    },
+    {
+      user_id: adminUserId,
+      action: "profile_password_changed",
+      entity_type: "users",
+      entity_id: adminUserId,
+      metadata: {
+        category: "auth",
+        summary: "Changed account password",
+      },
+    },
+  ];
+
+  for (const sample of auditSamples) {
+    const existing = await prisma.audit_logs.findFirst({
+      where: { action: sample.action, user_id: sample.user_id },
+    });
+    if (!existing) {
+      await prisma.audit_logs.create({ data: sample });
     }
   }
 

@@ -142,7 +142,10 @@ export class GatewayPaymentService {
     });
 
     await this.counters.recordTaxEarmarked(taxAmount);
-    await this.counters.recordGatewayPayment();
+    await this.counters.recordGatewayPaymentCompleted(
+      site.operatorExternalId,
+      gross,
+    );
 
     const feedRow = await this.prisma.client.live_activity_feed.create({
       data: {

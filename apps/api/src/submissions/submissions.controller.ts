@@ -63,7 +63,7 @@ export class SubmissionsController {
   }
 
   @Patch(":id/review")
-  @Roles("admin", "supervisor")
+  @Roles("super_admin", "admin", "supervisor", "analyst")
   review(
     @Param("id") id: string,
     @Body() dto: ReviewSubmissionDto,

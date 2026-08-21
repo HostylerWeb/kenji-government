@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Building2,
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  Ticket,
   CreditCard,
   TrendingUp,
   Banknote,
@@ -22,22 +21,53 @@ import { SkeletonCard } from "@/components/skeleton";
 import { Badge } from "@/components/badge";
 import { PageHeader } from "@/components/page-header";
 import { LiveActivityTicker } from "@/components/live-activity-ticker";
+import { AnimatedMetricRing } from "@/components/animated-metric-ring";
+import {
+  ComplianceBreakdownBar,
+  GgrTaxTrendChart,
+  OperatorStatusDonut,
+} from "@/components/dashboard-charts";
+import {
+  PerformanceDateFilter,
+  PerformanceDateLabel,
+} from "@/components/performance-date-filter";
 import { useAuth } from "@/lib/use-auth";
 import { useLiveStream } from "@/hooks/use-live-stream";
 import {
   getDashboardStats,
   getDashboardAlerts,
   getExtendedDashboardStats,
+  getDashboardCharts,
+  getDashboardPerformance,
   getLiveActivity,
   getLiveCounters,
   type LiveFeedItem,
+  type DashboardCharts,
+  type DashboardPerformance,
 } from "@/lib/api";
 import { formatKsh, formatNumber } from "@/lib/utils";
+import {
+  type DatePreset,
+  resolveDateRange,
+} from "@/lib/date-range";
+
+const PERFORMANCE_FILTER_ROLES = new Set([
+  "super_admin",
+  "admin",
+  "supervisor",
+  "analyst",
+]);
 
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const [stats, setStats] = useState<Awaited<ReturnType<typeof getDashboardStats>> | null>(null);
   const [extended, setExtended] = useState<Awaited<ReturnType<typeof getExtendedDashboardStats>> | null>(null);
+  const [charts, setCharts] = useState<DashboardCharts | null>(null);
+  const [performance, setPerformance] = useState<DashboardPerformance | null>(null);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>("this_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [alerts, setAlerts] = useState<Awaited<ReturnType<typeof getDashboardAlerts>> | null>(null);
   const [liveCounters, setLiveCounters] = useState<Awaited<ReturnType<typeof getLiveCounters>> | null>(null);
   const [initialFeed, setInitialFeed] = useState<LiveFeedItem[]>([]);
@@ -45,11 +75,35 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const { events: streamEvents, connected } = useLiveStream(token);
 
+  const canFilterPerformance = PERFORMANCE_FILTER_ROLES.has(user?.role ?? "");
+  const performanceRange = useMemo(
+    () => resolveDateRange(datePreset, customFrom, customTo),
+    [datePreset, customFrom, customTo],
+  );
+
+  const loadPerformance = useCallback(async () => {
+    if (!token || !canFilterPerformance) return;
+    if (datePreset === "custom" && (!customFrom || !customTo)) return;
+    setPerformanceLoading(true);
+    try {
+      const data = await getDashboardPerformance(token, {
+        from: performanceRange.from,
+        to: performanceRange.to,
+      });
+      setPerformance(data);
+    } catch {
+      setPerformance(null);
+    } finally {
+      setPerformanceLoading(false);
+    }
+  }, [token, canFilterPerformance, datePreset, performanceRange.from, performanceRange.to]);
+
   useEffect(() => {
     if (!token) return;
     Promise.all([
       getDashboardStats(token).then(setStats),
       getExtendedDashboardStats(token).then(setExtended).catch(() => {}),
+      getDashboardCharts(token).then(setCharts).catch(() => {}),
       getDashboardAlerts(token).then(setAlerts).catch(() => {}),
       getLiveActivity(token, { limit: 15 }).then((r) => setInitialFeed(r.items)).catch(() => {}),
       getLiveCounters(token).then(setLiveCounters).catch(() => {}),
@@ -57,6 +111,10 @@ export default function DashboardPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    loadPerformance();
+  }, [loadPerformance]);
 
   useEffect(() => {
     if (!token) return;
@@ -85,6 +143,11 @@ export default function DashboardPage() {
   })();
 
   const complianceRate = extended?.compliance_rate ?? 0;
+  const performanceMetrics = performance?.metrics ?? charts?.metrics;
+  const performanceBusy = loading || (canFilterPerformance && performanceLoading);
+  const periodLabel = canFilterPerformance
+    ? performanceRange.label
+    : "This Month";
 
   return (
     <AppShell user={user} title="Dashboard">
@@ -128,7 +191,7 @@ export default function DashboardPage() {
               <StatCard
                 title="Revenue Today"
                 value={formatKsh(liveCounters?.revenue_today)}
-                subLabel="Ticket sales (EAT)"
+                subLabel="Gateway payments (EAT)"
                 icon={<TrendingUp className="h-5 w-5" />}
                 variant="success"
               />
@@ -173,10 +236,10 @@ export default function DashboardPage() {
                 className="xl:col-span-1"
               />
               <StatCard
-                title="Tickets Today"
-                value={formatNumber(liveCounters?.tickets_today)}
-                subLabel={`Live — ${liveCounters?.date ?? "today"}`}
-                icon={<Ticket className="h-5 w-5" />}
+                title="Payments Today"
+                value={formatNumber(liveCounters?.gateway_payments_today)}
+                subLabel={`Gateway — ${liveCounters?.date ?? "today"}`}
+                icon={<CreditCard className="h-5 w-5" />}
                 className="xl:col-span-1"
               />
               <StatCard
@@ -191,16 +254,137 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Live feed + Alerts ─────────────────────────── */}
+        {/* ── Animated metric rings ─────────────────────── */}
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Performance Overview</CardTitle>
+                {!canFilterPerformance && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Showing this month — contact a supervisor to change the period
+                  </p>
+                )}
+              </div>
+              {canFilterPerformance ? (
+                <PerformanceDateFilter
+                  preset={datePreset}
+                  customFrom={customFrom}
+                  customTo={customTo}
+                  onPresetChange={setDatePreset}
+                  onCustomApply={(from, to) => {
+                    setCustomFrom(from);
+                    setCustomTo(to);
+                  }}
+                />
+              ) : (
+                <PerformanceDateLabel range={resolveDateRange("this_month")} />
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-5">
+            {performanceBusy ? (
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2">
+                    <div className="h-[120px] w-[120px] animate-pulse rounded-full bg-muted" />
+                    <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+                <AnimatedMetricRing
+                  value={
+                    performanceMetrics?.compliance_rate ?? complianceRate
+                  }
+                  label="Compliance Rate"
+                  subLabel={`${formatNumber(stats?.compliant_operators)} operators · ${periodLabel}`}
+                  color="#00A551"
+                />
+                <AnimatedMetricRing
+                  value={performanceMetrics?.tax_collection_rate ?? 0}
+                  label="Tax Collection"
+                  subLabel={periodLabel}
+                  color="#1A365D"
+                />
+                <AnimatedMetricRing
+                  value={
+                    canFilterPerformance
+                      ? (performance?.metrics.payment_success_rate ?? 0)
+                      : (charts?.metrics.active_share ?? 0)
+                  }
+                  label={
+                    canFilterPerformance ? "Payment Success" : "Active Operators"
+                  }
+                  subLabel={periodLabel}
+                  color="#16A34A"
+                />
+                <AnimatedMetricRing
+                  value={performanceMetrics?.expiring_licences ?? 0}
+                  max={Math.max(stats?.total_active_operators ?? 1, 1)}
+                  displayValue={formatNumber(
+                    performanceMetrics?.expiring_licences ?? 0,
+                  )}
+                  label="Licences Expiring"
+                  subLabel={periodLabel}
+                  color="#D97706"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Charts row ────────────────────────────────── */}
         <div className="grid gap-4 lg:grid-cols-3">
-          {/* Live activity */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="border-b border-border/50 pb-4">
+              <CardTitle>GGR &amp; Tax Trend</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {loading ? (
+                <div className="h-[280px] animate-pulse rounded-lg bg-muted" />
+              ) : (
+                <GgrTaxTrendChart data={charts?.ggr_trend ?? []} />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b border-border/50 pb-4">
+              <CardTitle>Operator Status</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {loading ? (
+                <div className="h-[220px] animate-pulse rounded-lg bg-muted" />
+              ) : (
+                <OperatorStatusDonut data={charts?.operator_status ?? []} />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Compliance breakdown ──────────────────────── */}
+        {!loading && (charts?.compliance_breakdown.length ?? 0) > 0 && (
+          <Card>
+            <CardHeader className="border-b border-border/50 pb-4">
+              <CardTitle>Compliance Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <ComplianceBreakdownBar data={charts?.compliance_breakdown ?? []} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Oversight feed + Alerts ─────────────────────── */}
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
           <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b border-border/50 pb-4">
+            <Card className="flex max-h-[min(32rem,55vh)] flex-col">
+              <CardHeader className="shrink-0 border-b border-border/50 pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-primary" />
-                    Live Activity
+                    Oversight Feed
                   </CardTitle>
                   <Badge
                     variant={connected ? "success" : "muted"}
@@ -211,16 +395,19 @@ export default function DashboardPage() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                <LiveActivityTicker events={feedEvents} connected={connected} />
+              <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
+                <LiveActivityTicker
+                  events={feedEvents}
+                  connected={connected}
+                  compact
+                />
               </CardContent>
             </Card>
           </div>
 
-          {/* Alerts panel */}
           <div>
-            <Card className="h-full">
-              <CardHeader className="border-b border-border/50 pb-4">
+            <Card className="flex max-h-[min(32rem,55vh)] flex-col">
+              <CardHeader className="shrink-0 border-b border-border/50 pb-4">
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-warning" />
                   Recent Alerts
@@ -229,7 +416,7 @@ export default function DashboardPage() {
                   )}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
                 {allAlerts.length === 0 ? (
                   <EmptyState
                     icon={<CheckCircle2 className="h-6 w-6" />}

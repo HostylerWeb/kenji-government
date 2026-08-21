@@ -19,6 +19,8 @@ export const ingestDocumentTypeSchema = z.enum([
   "tax_certificate",
   "audit_report",
   "insurance",
+  "monthly_return",
+  "bank_statement",
   "other",
 ]);
 
@@ -79,6 +81,17 @@ export const LIVE_EVENT_TYPES = {
   PAYMENT_FAILED: "payment.failed",
   OPERATOR_UPDATED: "operator.updated",
 } as const;
+
+/** Events surfaced on the staff oversight feed (no per-ticket noise). */
+export const IMPORTANT_LIVE_EVENT_TYPES = [
+  LIVE_EVENT_TYPES.PAYMENT_COMPLETED,
+  LIVE_EVENT_TYPES.PAYMENT_FAILED,
+  LIVE_EVENT_TYPES.OPERATOR_UPDATED,
+] as const;
+
+export function isImportantLiveEvent(eventType: string): boolean {
+  return (IMPORTANT_LIVE_EVENT_TYPES as readonly string[]).includes(eventType);
+}
 
 export const LIVE_REDIS_CHANNELS = {
   ALL: "gra:live:all",
