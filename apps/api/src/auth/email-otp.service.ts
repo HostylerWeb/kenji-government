@@ -31,13 +31,12 @@ export class EmailOtpService {
     const client = this.redis.getClient();
     await client.setex(`${OTP_PREFIX}:${userId}`, OTP_TTL_SECONDS, code);
 
-    const smtp = await this.settings.getSmtpConfig();
-    const host = smtp?.host ?? process.env.SMTP_HOST;
-    const port = smtp?.port ?? Number(process.env.SMTP_PORT ?? 587);
-    const user = smtp?.user ?? process.env.SMTP_USER;
-    const pass = smtp?.pass ?? process.env.SMTP_PASS;
-    const from =
-      smtp?.from ?? process.env.SMTP_FROM ?? "noreply@gra.go.ke";
+    const smtp = this.settings.getSmtpConfig();
+    const host = smtp?.host;
+    const port = smtp?.port ?? 587;
+    const user = smtp?.user;
+    const pass = smtp?.pass;
+    const from = smtp?.from ?? "noreply@gra.go.ke";
 
     if (!host) {
       this.logger.warn(

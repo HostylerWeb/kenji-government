@@ -61,6 +61,9 @@ grep -q '^AUTH_EMAIL_OTP_DISABLED=' .env || echo 'AUTH_EMAIL_OTP_DISABLED=true' 
 grep -q '^AUTH_MFA_DISABLED=' .env || echo 'AUTH_MFA_DISABLED=true' >> .env
 sed -i 's|^AUTH_EMAIL_OTP_DISABLED=.*|AUTH_EMAIL_OTP_DISABLED=true|' .env
 sed -i 's|^AUTH_MFA_DISABLED=.*|AUTH_MFA_DISABLED=true|' .env
+grep -q '^GOVERNMENT_TAX_RATE=' .env || echo 'GOVERNMENT_TAX_RATE=0.3' >> .env
+sed -i 's|^GOVERNMENT_TAX_RATE=.*|GOVERNMENT_TAX_RATE=0.3|' .env
+sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL="https://srv1781529.hstgr.cloud/api"|' .env
 
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -

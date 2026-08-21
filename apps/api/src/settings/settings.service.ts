@@ -4,14 +4,11 @@ import {
   Injectable,
 } from "@nestjs/common";
 import {
+  getGovernmentTaxRateFromEnv,
   GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT,
-  GOVERNMENT_TAX_RATE_DEFAULT,
-  encryptIngestSecret,
-  decryptIngestSecret,
   isSuperAdmin,
   SYSTEM_SETTING_KEYS,
   type AuthUser,
-  type UpdateSystemSettingsInput,
   updateSystemSettingsSchema,
 } from "@kenji-government/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -19,7 +16,6 @@ import type { Prisma } from "@prisma/client";
 
 type PublicSystemSettings = {
   tax_rate: number;
-  gateway_fee_rate: number;
   smtp: {
     host: string | null;
     port: number | null;
@@ -27,7 +23,6 @@ type PublicSystemSettings = {
     from: string | null;
     configured: boolean;
   };
-  report_stakeholder_emails: string[];
   treasury_account_ref: string | null;
   can_edit: boolean;
 };
@@ -36,26 +31,12 @@ type PublicSystemSettings = {
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getTaxRate(): Promise<number> {
-    const row = await this.prisma.client.system_settings.findUnique({
-      where: { key: SYSTEM_SETTING_KEYS.TAX_RATE },
-    });
-    if (!row?.value || typeof row.value !== "object") {
-      return GOVERNMENT_TAX_RATE_DEFAULT;
-    }
-    const rate = (row.value as { rate?: number }).rate;
-    return typeof rate === "number" ? rate : GOVERNMENT_TAX_RATE_DEFAULT;
+  getTaxRate(): number {
+    return getGovernmentTaxRateFromEnv();
   }
 
-  async getGatewayFeeRate(): Promise<number> {
-    const row = await this.prisma.client.system_settings.findUnique({
-      where: { key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE },
-    });
-    if (!row?.value || typeof row.value !== "object") {
-      return GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT;
-    }
-    const rate = (row.value as { rate?: number }).rate;
-    return typeof rate === "number" ? rate : GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT;
+  getGatewayFeeRate(): number {
+    return GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT;
   }
 
   async getTreasuryAccountRef(): Promise<string> {
@@ -69,72 +50,31 @@ export class SettingsService {
     return ref ?? "KE-TREASURY-DEFAULT";
   }
 
-  async getSmtpConfig(): Promise<{
+  getSmtpConfig(): {
     host?: string;
     port?: number;
     user?: string;
     pass?: string;
     from?: string;
-  } | null> {
-    const row = await this.prisma.client.system_settings.findUnique({
-      where: { key: SYSTEM_SETTING_KEYS.SMTP },
-    });
-    if (!row?.value || typeof row.value !== "object") {
-      return null;
-    }
-    const smtp = row.value as {
-      host?: string;
-      port?: number;
-      user?: string;
-      pass_encrypted?: string;
-      from?: string;
-    };
-    if (!smtp.host) return null;
-
-    let pass: string | undefined;
-    if (smtp.pass_encrypted) {
-      pass = decryptIngestSecret(smtp.pass_encrypted);
-    }
+  } | null {
+    const host = process.env.SMTP_HOST?.trim();
+    if (!host) return null;
 
     return {
-      host: smtp.host,
-      port: smtp.port ?? 587,
-      user: smtp.user,
-      pass,
-      from: smtp.from,
+      host,
+      port: Number(process.env.SMTP_PORT ?? 587),
+      user: process.env.SMTP_USER?.trim() || undefined,
+      pass: process.env.SMTP_PASS?.trim() || undefined,
+      from: process.env.SMTP_FROM?.trim() || undefined,
     };
   }
 
   async getPublicSettings(user: AuthUser): Promise<PublicSystemSettings> {
-    const taxRate = await this.getTaxRate();
-    const gatewayFeeRate = await this.getGatewayFeeRate();
-    const smtpRow = await this.prisma.client.system_settings.findUnique({
-      where: { key: SYSTEM_SETTING_KEYS.SMTP },
-    });
-    const emailsRow = await this.prisma.client.system_settings.findUnique({
-      where: { key: SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS },
-    });
+    const taxRate = this.getTaxRate();
+    const smtp = this.getSmtpConfig();
     const treasuryRow = await this.prisma.client.system_settings.findUnique({
       where: { key: SYSTEM_SETTING_KEYS.TREASURY_ACCOUNT_REF },
     });
-
-    const smtpValue =
-      smtpRow?.value && typeof smtpRow.value === "object"
-        ? (smtpRow.value as {
-            host?: string;
-            port?: number;
-            user?: string;
-            pass_encrypted?: string;
-            from?: string;
-          })
-        : {};
-
-    const emails =
-      emailsRow?.value &&
-      typeof emailsRow.value === "object" &&
-      Array.isArray((emailsRow.value as { emails?: string[] }).emails)
-        ? (emailsRow.value as { emails: string[] }).emails
-        : [];
 
     const treasuryRef =
       treasuryRow?.value &&
@@ -144,15 +84,13 @@ export class SettingsService {
 
     return {
       tax_rate: taxRate,
-      gateway_fee_rate: gatewayFeeRate,
       smtp: {
-        host: smtpValue.host ?? null,
-        port: smtpValue.port ?? null,
-        user: smtpValue.user ?? null,
-        from: smtpValue.from ?? null,
-        configured: Boolean(smtpValue.host),
+        host: smtp?.host ?? null,
+        port: smtp?.port ?? null,
+        user: smtp?.user ?? null,
+        from: smtp?.from ?? null,
+        configured: Boolean(smtp?.host),
       },
-      report_stakeholder_emails: emails,
       treasury_account_ref: treasuryRef,
       can_edit: isSuperAdmin(user.role),
     };
@@ -171,55 +109,6 @@ export class SettingsService {
     }
 
     const data = parsed.data;
-
-    if (data.tax_rate) {
-      await this.upsertSetting(
-        SYSTEM_SETTING_KEYS.TAX_RATE,
-        { rate: data.tax_rate.rate },
-        user.id,
-      );
-    }
-
-    if (data.gateway_fee_rate) {
-      await this.upsertSetting(
-        SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE,
-        { rate: data.gateway_fee_rate.rate },
-        user.id,
-      );
-    }
-
-    if (data.smtp) {
-      const existing = await this.prisma.client.system_settings.findUnique({
-        where: { key: SYSTEM_SETTING_KEYS.SMTP },
-      });
-      const current =
-        existing?.value && typeof existing.value === "object"
-          ? (existing.value as Record<string, unknown>)
-          : {};
-
-      const next: Record<string, unknown> = { ...current };
-      if (data.smtp.host !== undefined) next.host = data.smtp.host;
-      if (data.smtp.port !== undefined) next.port = data.smtp.port;
-      if (data.smtp.user !== undefined) next.user = data.smtp.user;
-      if (data.smtp.from !== undefined) next.from = data.smtp.from;
-      if (data.smtp.pass) {
-        next.pass_encrypted = encryptIngestSecret(data.smtp.pass);
-      }
-
-      await this.upsertSetting(
-        SYSTEM_SETTING_KEYS.SMTP,
-        next as Prisma.InputJsonValue,
-        user.id,
-      );
-    }
-
-    if (data.report_stakeholder_emails) {
-      await this.upsertSetting(
-        SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS,
-        { emails: data.report_stakeholder_emails.emails },
-        user.id,
-      );
-    }
 
     if (data.treasury_account_ref) {
       await this.upsertSetting(

@@ -1178,7 +1178,6 @@ export async function exportRegionalDataset(
 
 export type SystemSettings = {
   tax_rate: number;
-  gateway_fee_rate: number;
   smtp: {
     host: string | null;
     port: number | null;
@@ -1186,7 +1185,6 @@ export type SystemSettings = {
     from: string | null;
     configured: boolean;
   };
-  report_stakeholder_emails: string[];
   treasury_account_ref: string | null;
   can_edit: boolean;
 };

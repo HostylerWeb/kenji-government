@@ -135,23 +135,9 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!token || !isSuperAdmin) return;
     const form = new FormData(e.currentTarget);
-    const emails = String(form.get("report_emails") ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
 
     try {
       const updated = await updateSystemSettings(token, {
-        tax_rate: { rate: Number(form.get("tax_rate")) / 100 },
-        gateway_fee_rate: { rate: Number(form.get("gateway_fee_rate")) / 100 },
-        smtp: {
-          host: String(form.get("smtp_host") || "") || undefined,
-          port: Number(form.get("smtp_port") || 587),
-          user: String(form.get("smtp_user") || "") || undefined,
-          pass: String(form.get("smtp_pass") || "") || undefined,
-          from: String(form.get("smtp_from") || "") || undefined,
-        },
-        report_stakeholder_emails: { emails },
         treasury_account_ref: {
           account_ref: String(form.get("treasury_ref")),
         },
@@ -334,106 +320,46 @@ export default function SettingsPage() {
               <h2 className="mb-2 text-base font-semibold">System configuration</h2>
               {isSuperAdmin ? (
                 <p className="mb-4 text-xs text-muted">
-                  Super administrator only — tax rate, gateway fee rate, SMTP, treasury account, report recipients.
+                  Super administrator only — treasury account reference. Tax rate and SMTP are configured in the server environment.
                 </p>
               ) : (
                 <p className="mb-4 text-xs text-muted">
-                  Read-only. Contact a super administrator to change tax rate or SMTP settings.
+                  Read-only. Contact a super administrator to change the treasury account reference.
                 </p>
               )}
               <form onSubmit={handleSystemSettings} className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">
                   Government tax rate (%)
                   <input
-                    name="tax_rate"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    disabled={!isSuperAdmin}
-                    defaultValue={Math.round(systemSettings.tax_rate * 1000) / 10}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm">
-                  Default gateway fee rate (%)
-                  <input
-                    name="gateway_fee_rate"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    disabled={!isSuperAdmin}
-                    defaultValue={Math.round(systemSettings.gateway_fee_rate * 10000) / 100}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                    readOnly
+                    value={Math.round(systemSettings.tax_rate * 1000) / 10}
+                    className="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-muted-foreground"
                   />
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    Applied when the payment gateway omits fee fields on ingest
+                    Set via GOVERNMENT_TAX_RATE in the server environment
                   </span>
                 </label>
                 <label className="text-sm">
+                  SMTP configuration
+                  <input
+                    readOnly
+                    value={
+                      systemSettings.smtp.configured
+                        ? `${systemSettings.smtp.host}:${systemSettings.smtp.port ?? 587}`
+                        : "Not configured"
+                    }
+                    className="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-muted-foreground"
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Set via SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in the server environment
+                  </span>
+                </label>
+                <label className="text-sm sm:col-span-2">
                   Treasury account ref
                   <input
                     name="treasury_ref"
                     disabled={!isSuperAdmin}
                     defaultValue={systemSettings.treasury_account_ref ?? ""}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm sm:col-span-2">
-                  Report stakeholder emails (comma-separated)
-                  <input
-                    name="report_emails"
-                    disabled={!isSuperAdmin}
-                    defaultValue={systemSettings.report_stakeholder_emails.join(", ")}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm">
-                  SMTP host
-                  <input
-                    name="smtp_host"
-                    disabled={!isSuperAdmin}
-                    placeholder={systemSettings.smtp.host ?? "not configured"}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm">
-                  SMTP port
-                  <input
-                    name="smtp_port"
-                    type="number"
-                    disabled={!isSuperAdmin}
-                    placeholder={String(systemSettings.smtp.port ?? 587)}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm">
-                  SMTP user
-                  <input
-                    name="smtp_user"
-                    disabled={!isSuperAdmin}
-                    placeholder={systemSettings.smtp.user ?? ""}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm">
-                  SMTP password
-                  <input
-                    name="smtp_pass"
-                    type="password"
-                    disabled={!isSuperAdmin}
-                    placeholder={systemSettings.smtp.configured ? "leave blank to keep" : ""}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
-                  />
-                </label>
-                <label className="text-sm sm:col-span-2">
-                  SMTP from address
-                  <input
-                    name="smtp_from"
-                    type="email"
-                    disabled={!isSuperAdmin}
-                    placeholder={systemSettings.smtp.from ?? "noreply@gra.go.ke"}
                     className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
                   />
                 </label>

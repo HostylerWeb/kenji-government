@@ -50,6 +50,10 @@ export function Tabs({
   className?: string;
   variant?: "pills" | "underline";
 }) {
+  function handleChange(id: string) {
+    onChange(id);
+    window.scrollTo(0, 0);
+  }
   if (variant === "underline") {
     return (
       <div
@@ -68,7 +72,7 @@ export function Tabs({
             role="tab"
             type="button"
             aria-selected={isActive}
-            onClick={() => onChange(tab.id)}
+            onClick={() => handleChange(tab.id)}
             className={cn(
               "relative shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors outline-none",
               "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:transition-all",
@@ -112,7 +116,7 @@ export function Tabs({
           role="tab"
           type="button"
           aria-selected={active === tab.id}
-          onClick={() => onChange(tab.id)}
+          onClick={() => handleChange(tab.id)}
           className={cn(
             "shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-all outline-none",
             active === tab.id

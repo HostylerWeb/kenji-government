@@ -299,7 +299,7 @@ export default function EnforcementCaseDetailPage() {
                     >
                       <span className="text-left">
                         <span className="block font-medium">Issue Warning</span>
-                        <span className="block text-xs font-normal text-muted-foreground">
+                        <span className="block text-xs font-normal text-white/90">
                           Record a formal warning to the operator
                         </span>
                       </span>
@@ -325,7 +325,7 @@ export default function EnforcementCaseDetailPage() {
                     >
                       <span className="text-left">
                         <span className="block font-medium">Suspend Operator</span>
-                        <span className="block text-xs font-normal text-muted-foreground">
+                        <span className="block text-xs font-normal text-white/90">
                           Immediately suspend operator operations
                         </span>
                       </span>

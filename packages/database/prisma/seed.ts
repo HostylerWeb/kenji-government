@@ -1066,23 +1066,11 @@ async function main() {
     where: { email: "admin@gra.go.ke" },
   });
 
-  await prisma.system_settings.upsert({
-    where: { key: SYSTEM_SETTING_KEYS.TAX_RATE },
-    update: { value: { rate: GOVERNMENT_TAX_RATE_DEFAULT } },
-    create: {
-      key: SYSTEM_SETTING_KEYS.TAX_RATE,
-      value: { rate: GOVERNMENT_TAX_RATE_DEFAULT },
-      updated_by: superAdmin?.id,
-    },
-  });
-
-  await prisma.system_settings.upsert({
-    where: { key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE },
-    update: { value: { rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT } },
-    create: {
-      key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE,
-      value: { rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT },
-      updated_by: superAdmin?.id,
+  await prisma.system_settings.deleteMany({
+    where: {
+      key: {
+        in: ["tax_rate", "gateway_fee_rate", "smtp", "report_stakeholder_emails"],
+      },
     },
   });
 
@@ -1092,18 +1080,6 @@ async function main() {
     create: {
       key: SYSTEM_SETTING_KEYS.TREASURY_ACCOUNT_REF,
       value: { account_ref: "KE-TREASURY-GRA-001" },
-      updated_by: superAdmin?.id,
-    },
-  });
-
-  await prisma.system_settings.upsert({
-    where: { key: SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS },
-    update: {
-      value: { emails: ["supervisor@gra.go.ke", "analyst@gra.go.ke"] },
-    },
-    create: {
-      key: SYSTEM_SETTING_KEYS.REPORT_STAKEHOLDER_EMAILS,
-      value: { emails: ["supervisor@gra.go.ke", "analyst@gra.go.ke"] },
       updated_by: superAdmin?.id,
     },
   });
