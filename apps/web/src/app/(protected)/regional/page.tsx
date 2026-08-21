@@ -9,6 +9,7 @@ import {
   Banknote,
   TrendingUp,
   ShieldCheck,
+  MousePointerClick,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/card";
@@ -17,7 +18,7 @@ import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
 import { StatCard } from "@/components/stat-card";
 import { PageHeader } from "@/components/page-header";
-import { TableScroll } from "@/components/table-scroll";
+import { SortableTable, type SortableColumn } from "@/components/sortable-table";
 import {
   CountyBarChart,
   PeakTimeHeatmap,
@@ -27,12 +28,22 @@ import {
   KenyaCountyChoropleth,
   type ChoroplethMetric,
 } from "@/components/kenya-county-choropleth";
+import { RegionalTopCounties } from "@/components/regional-top-counties";
+import {
+  PerformanceDateFilter,
+  PerformanceDateLabel,
+} from "@/components/performance-date-filter";
 import { useAuth } from "@/lib/use-auth";
 import {
   exportRegionalDataset,
   getRegionalOverview,
+  type RegionalCountyPerformance,
   type RegionalOverview,
 } from "@/lib/api";
+import {
+  type DatePreset,
+  resolveDateRange,
+} from "@/lib/date-range";
 import { formatKsh, formatNumber } from "@/lib/utils";
 
 type TabId = "commercial" | "player_safety" | "behaviour" | "spend";
@@ -78,22 +89,43 @@ export default function RegionalPage() {
   const { user, token } = useAuth();
   const [tab, setTab] = useState<TabId>("commercial");
   const [mapMetric, setMapMetric] = useState<ChoroplethMetric>("annual_ggr");
+  const [highlightCounty, setHighlightCounty] = useState<string | null>(null);
+  const [datePreset, setDatePreset] = useState<DatePreset>("this_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [overview, setOverview] = useState<RegionalOverview | null>(null);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const dateRange = useMemo(
+    () => resolveDateRange(datePreset, customFrom, customTo),
+    [datePreset, customFrom, customTo],
+  );
 
   useEffect(() => {
     if (!token) return;
-    getRegionalOverview(token, 30)
-      .then(setOverview)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, [token]);
+    setLoading(true);
+    getRegionalOverview(token, {
+      from: dateRange.from,
+      to: dateRange.to,
+    })
+      .then((data) => {
+        setOverview(data);
+        setError("");
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
+  }, [token, dateRange.from, dateRange.to]);
 
   async function handleExport() {
     if (!token) return;
     setExporting(true);
     try {
-      await exportRegionalDataset(token, 30);
+      await exportRegionalDataset(token, {
+        from: dateRange.from,
+        to: dateRange.to,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
@@ -113,6 +145,48 @@ export default function RegionalPage() {
     [overview?.counties],
   );
 
+  const playerActivityColumns = useMemo((): SortableColumn<RegionalCountyPerformance>[] => [
+    {
+      id: "county",
+      label: "County",
+      sortValue: (row) => row.county.toLowerCase(),
+      render: (row) => (
+        <Link
+          href={`/regional/${encodeURIComponent(row.county)}`}
+          className="font-medium hover:text-primary"
+        >
+          {row.county}
+        </Link>
+      ),
+    },
+    {
+      id: "sessions",
+      label: "Sessions",
+      sortValue: (row) => row.sessions,
+      cellClassName: "tabular-nums",
+      render: (row) => formatNumber(row.sessions),
+    },
+    {
+      id: "sessions_change",
+      label: "Change",
+      sortValue: (row) => row.sessions_change_pct ?? -Infinity,
+      render: (row) => <GrowthBadge value={row.sessions_change_pct} />,
+    },
+    {
+      id: "play_safe",
+      label: "Play Safe",
+      sortValue: (row) => row.play_safe,
+      cellClassName: "tabular-nums",
+      render: (row) => formatNumber(row.play_safe),
+    },
+    {
+      id: "play_safe_change",
+      label: "Play Safe Δ",
+      sortValue: (row) => row.play_safe_change_pct ?? -Infinity,
+      render: (row) => <GrowthBadge value={row.play_safe_change_pct} />,
+    },
+  ], []);
+
   if (!user) return null;
 
   return (
@@ -123,17 +197,37 @@ export default function RegionalPage() {
           subtitle="Geographical distribution of player activity and commercial performance across Kenya"
           breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Regional" }]}
           action={
-            <Button
-              variant="outline"
-              size="sm"
-              loading={exporting}
-              leftIcon={<Download className="h-4 w-4" />}
-              onClick={handleExport}
-            >
-              Export CSV
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <PerformanceDateFilter
+                preset={datePreset}
+                customFrom={customFrom}
+                customTo={customTo}
+                onPresetChange={setDatePreset}
+                onCustomApply={(from, to) => {
+                  setCustomFrom(from);
+                  setCustomTo(to);
+                  setDatePreset("custom");
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                loading={exporting}
+                leftIcon={<Download className="h-4 w-4" />}
+                onClick={handleExport}
+              >
+                Export CSV
+              </Button>
+            </div>
           }
         />
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <PerformanceDateLabel range={dateRange} />
+          {loading && (
+            <span className="text-xs text-muted-foreground">Updating regional data…</span>
+          )}
+        </div>
 
         {error && (
           <div className="rounded-lg border border-danger/30 bg-danger-subtle px-4 py-3 text-sm text-danger">
@@ -141,6 +235,10 @@ export default function RegionalPage() {
           </div>
         )}
 
+        <div
+          className={loading ? "space-y-5 opacity-60 transition-opacity" : "space-y-5"}
+          aria-busy={loading}
+        >
         {summary && (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
@@ -156,7 +254,7 @@ export default function RegionalPage() {
               subLabel={
                 summary.sessions_ytd_change_pct !== null
                   ? `${formatChangePct(summary.sessions_ytd_change_pct)} ${summary.sessions_ytd_change_label}`
-                  : undefined
+                  : `For ${dateRange.label}`
               }
             />
             <StatCard
@@ -172,13 +270,7 @@ export default function RegionalPage() {
                     }
                   : undefined
               }
-              subLabel={
-                summary.ggr_recent_change_pct !== null
-                  ? `${formatChangePct(summary.ggr_recent_change_pct)} ${summary.ggr_recent_change_label}`
-                  : summary.ggr_ytd > 0
-                    ? `YTD GGR: ${formatKsh(summary.ggr_ytd)}`
-                    : "Across active operators"
-              }
+              subLabel="Annual operator totals (not filtered by date range)"
             />
             <StatCard
               title="Active Counties"
@@ -202,84 +294,53 @@ export default function RegionalPage() {
           </div>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader className="space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>National Heatmap</CardTitle>
+        <div className="space-y-5">
+          <Card>
+            <CardHeader className="space-y-4 border-b border-border/60 pb-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="max-w-2xl space-y-2">
+                  <CardTitle>National county map</CardTitle>
                   <CardDescription>
-                    County regions shaded by intensity. Click a county to see detail and where it sits on the scale.
+                    Explore performance across all 47 counties. Switch the metric, hover for quick stats,
+                    or click through to a full county profile.
                   </CardDescription>
+                  <p className="inline-flex items-center gap-2 rounded-md bg-secondary/70 px-3 py-2 text-xs text-muted-foreground">
+                    <MousePointerClick className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    Hover counties on the map or in the list below to cross-highlight
+                  </p>
                 </div>
-                <Tabs
-                  tabs={MAP_METRICS.map((item) => ({ id: item.id, label: item.label }))}
-                  active={mapMetric}
-                  onChange={(id) => setMapMetric(id as ChoroplethMetric)}
-                />
+                <div className="shrink-0">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Map metric
+                  </p>
+                  <Tabs
+                    tabs={MAP_METRICS.map((item) => ({ id: item.id, label: item.label }))}
+                    active={mapMetric}
+                    onChange={(id) => setMapMetric(id as ChoroplethMetric)}
+                  />
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 pb-5 pt-4 sm:px-6">
               <KenyaCountyChoropleth
                 data={countyPerformance}
                 metric={mapMetric}
+                highlightCounty={highlightCounty}
+                onCountyHover={setHighlightCounty}
+                height={500}
+                legendOverlay
               />
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Counties</CardTitle>
-              <CardDescription>Ranked by annual GGR with session growth</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <TableScroll className="max-h-[460px] overflow-y-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="sticky top-0 z-10 border-b border-border bg-secondary/80 backdrop-blur">
-                    <tr>
-                      {["County", "Sessions", "Change", "GGR", "GGR YTD Δ"].map((header) => (
-                        <th
-                          key={header}
-                          className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {countyPerformance.slice(0, 12).map((row) => (
-                      <tr
-                        key={row.county}
-                        className="border-b border-border/50 last:border-0 hover:bg-secondary/30"
-                      >
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/regional/${encodeURIComponent(row.county)}`}
-                            className="font-medium hover:text-primary"
-                          >
-                            {row.county}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                          {formatNumber(row.sessions)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <GrowthBadge value={row.sessions_change_pct} />
-                        </td>
-                        <td className="px-4 py-3 tabular-nums font-medium">
-                          {formatKsh(row.annual_ggr)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <GrowthBadge value={row.ggr_ytd_change_pct} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TableScroll>
-            </CardContent>
-          </Card>
+          {countyPerformance.length > 0 && (
+            <RegionalTopCounties
+              rows={countyPerformance}
+              metric={mapMetric}
+              highlightCounty={highlightCounty}
+              onCountyHover={setHighlightCounty}
+            />
+          )}
         </div>
 
         <Card>
@@ -293,7 +354,7 @@ export default function RegionalPage() {
             <Card>
               <CardHeader>
                 <CardTitle>GGR by County</CardTitle>
-                <CardDescription>Annual GGR (KES)</CardDescription>
+                <CardDescription>Annual GGR by county ({dateRange.label} activity in table below)</CardDescription>
               </CardHeader>
               <CardContent>
                 <CountyBarChart
@@ -323,6 +384,9 @@ export default function RegionalPage() {
                         </span>
                         <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground sm:text-sm">
                           {formatNumber(row.operator_count)} ops · {formatKsh(row.annual_ggr)}
+                          <span className="hidden sm:inline">
+                            · {formatNumber(row.sessions)} sessions
+                          </span>
                           <GrowthBadge value={row.sessions_change_pct} />
                         </span>
                       </Link>
@@ -339,7 +403,7 @@ export default function RegionalPage() {
             {summary && (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard
-                  title="Sessions (30 days)"
+                  title={`Sessions (${dateRange.label})`}
                   value={formatNumber(summary.total_sessions)}
                   icon={<Users className="h-5 w-5" />}
                   trend={
@@ -360,7 +424,7 @@ export default function RegionalPage() {
                   }
                 />
                 <StatCard
-                  title="Play Safe (30 days)"
+                  title={`Play Safe (${dateRange.label})`}
                   value={formatNumber(
                     countyPerformance.reduce((sum, row) => sum + row.play_safe, 0),
                   )}
@@ -375,7 +439,7 @@ export default function RegionalPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Play Safe Activations</CardTitle>
-                  <CardDescription>By county (30 days)</CardDescription>
+                  <CardDescription>By county ({dateRange.label})</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <CountyBarChart
@@ -389,7 +453,7 @@ export default function RegionalPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Self-Exclusion Requests</CardTitle>
-                  <CardDescription>By county (30 days)</CardDescription>
+                  <CardDescription>By county ({dateRange.label})</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <CountyBarChart
@@ -405,53 +469,18 @@ export default function RegionalPage() {
             <Card>
               <CardHeader>
                 <CardTitle>County Player Activity</CardTitle>
-                <CardDescription>Session volume and % change vs prior 30 days</CardDescription>
+                <CardDescription>
+                  Session volume and % change vs prior period ({dateRange.label})
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <TableScroll>
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-border bg-secondary/50">
-                      <tr>
-                        {["County", "Sessions", "Change", "Play Safe", "Play Safe Δ"].map((header) => (
-                          <th
-                            key={header}
-                            className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                          >
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...countyPerformance]
-                        .sort((a, b) => b.sessions - a.sessions)
-                        .slice(0, 15)
-                        .map((row) => (
-                          <tr
-                            key={row.county}
-                            className="border-b border-border/50 last:border-0 hover:bg-secondary/30"
-                          >
-                            <td className="px-4 py-3 font-medium">
-                              <Link
-                                href={`/regional/${encodeURIComponent(row.county)}`}
-                                className="hover:text-primary"
-                              >
-                                {row.county}
-                              </Link>
-                            </td>
-                            <td className="px-4 py-3 tabular-nums">{formatNumber(row.sessions)}</td>
-                            <td className="px-4 py-3">
-                              <GrowthBadge value={row.sessions_change_pct} />
-                            </td>
-                            <td className="px-4 py-3 tabular-nums">{formatNumber(row.play_safe)}</td>
-                            <td className="px-4 py-3">
-                              <GrowthBadge value={row.play_safe_change_pct} />
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </TableScroll>
+                <SortableTable
+                  columns={playerActivityColumns}
+                  rows={countyPerformance}
+                  getRowKey={(row) => row.county}
+                  resetKey={`${dateRange.from}:${dateRange.to}:${countyPerformance.length}`}
+                  emptyMessage="No county activity for this period."
+                />
               </CardContent>
             </Card>
           </div>
@@ -461,7 +490,9 @@ export default function RegionalPage() {
           <Card>
             <CardHeader>
               <CardTitle>Peak Play Time</CardTitle>
-              <CardDescription>Session intensity heatmap (hour × day of week)</CardDescription>
+              <CardDescription>
+                Session intensity heatmap for {dateRange.label} (hour × day of week)
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <PeakTimeHeatmap
@@ -477,7 +508,7 @@ export default function RegionalPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Stake Band Distribution</CardTitle>
-                <CardDescription>Anonymised spend bands (KES)</CardDescription>
+                <CardDescription>Anonymised spend bands for {dateRange.label}</CardDescription>
               </CardHeader>
               <CardContent>
                 <StakeBandChart data={overview?.stake_band_distribution ?? []} />
@@ -486,7 +517,7 @@ export default function RegionalPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Age Band Distribution</CardTitle>
-                <CardDescription>Anonymised session age buckets</CardDescription>
+                <CardDescription>Anonymised session age buckets for {dateRange.label}</CardDescription>
               </CardHeader>
               <CardContent>
                 <StakeBandChart data={overview?.age_band_distribution ?? []} color={PURPLE} />
@@ -498,6 +529,7 @@ export default function RegionalPage() {
         {overview?.disclaimer && (
           <p className="text-xs text-muted-foreground">{overview.disclaimer}</p>
         )}
+        </div>
       </div>
     </AppShell>
   );

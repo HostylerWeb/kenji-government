@@ -89,9 +89,24 @@ kenji-harambe-pay/
   "ticket_reference": "TKT-12345",
   "kyc_status": "verified",
   "payer_fingerprint": "hashed-fp",
-  "county": "Nairobi"
+  "county": "Nairobi",
+  "tax_amount": 30,
+  "operator_amount": 70,
+  "gateway_fee_rate": 0.025,
+  "gateway_fee_amount": 2.5
 }
 ```
+
+**Money split (recommended):**
+
+| Line | Example (100 KES gross, 30% tax, 2.5% gateway fee) |
+|------|------------------------------------------------------|
+| Customer pays | 100.00 |
+| Tax to GRA | 30.00 |
+| Gateway fee | 2.50 |
+| Operator net | 67.50 (= operator_amount − gateway_fee) |
+
+The gateway should send `gateway_fee_rate` and `gateway_fee_amount` on every completed payment. If omitted, GRA ingest applies the **default gateway fee rate** from Settings (currently 2.5% of gross).
 
 **Body (failed):**
 
@@ -106,7 +121,7 @@ kenji-harambe-pay/
 }
 ```
 
-GRA applies configured tax rate if `tax_amount` / `operator_amount` are omitted.
+GRA applies configured tax rate if `tax_amount` / `operator_amount` are omitted, and configured gateway fee rate if `gateway_fee_rate` / `gateway_fee_amount` are omitted.
 
 **Credentials:** Per-operator site API keys (same as ingest sandbox) — gateway stores mapping operator → GRA site credentials.
 
@@ -114,12 +129,18 @@ See also: `docs/API.md`, `packages/shared/src/payments.ts` (`gatewayPaymentSchem
 
 ---
 
-## Tax rate
+## Tax and gateway fee rates
 
-Super admins set the government % in **GRA Settings** (this project). The gateway should either:
+Super admins set both rates in **GRA Settings**:
 
-- Call GRA staff API to read `tax_rate` (service account — to be added), or
-- Send only `gross_amount` and let GRA ingest apply the rate (supported today).
+| Setting | Purpose |
+|---------|---------|
+| **Government tax rate** | Share of gross earmarked for GRA |
+| **Default gateway fee rate** | Fallback when gateway omits fee fields on ingest |
+
+The gateway should ideally send explicit amounts on every notify. GRA staff see aggregated fees on **Payments → Operators** and per-transaction fees on **Payments → Transactions**.
+
+Alternatively, the gateway may send only `gross_amount` and let GRA ingest apply configured tax and gateway fee rates (supported today).
 
 ---
 

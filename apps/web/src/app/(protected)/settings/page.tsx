@@ -143,6 +143,7 @@ export default function SettingsPage() {
     try {
       const updated = await updateSystemSettings(token, {
         tax_rate: { rate: Number(form.get("tax_rate")) / 100 },
+        gateway_fee_rate: { rate: Number(form.get("gateway_fee_rate")) / 100 },
         smtp: {
           host: String(form.get("smtp_host") || "") || undefined,
           port: Number(form.get("smtp_port") || 587),
@@ -333,7 +334,7 @@ export default function SettingsPage() {
               <h2 className="mb-2 text-base font-semibold">System configuration</h2>
               {isSuperAdmin ? (
                 <p className="mb-4 text-xs text-muted">
-                  Super administrator only — tax rate, SMTP, treasury account, report recipients.
+                  Super administrator only — tax rate, gateway fee rate, SMTP, treasury account, report recipients.
                 </p>
               ) : (
                 <p className="mb-4 text-xs text-muted">
@@ -353,6 +354,22 @@ export default function SettingsPage() {
                     defaultValue={Math.round(systemSettings.tax_rate * 1000) / 10}
                     className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
                   />
+                </label>
+                <label className="text-sm">
+                  Default gateway fee rate (%)
+                  <input
+                    name="gateway_fee_rate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    disabled={!isSuperAdmin}
+                    defaultValue={Math.round(systemSettings.gateway_fee_rate * 10000) / 100}
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-secondary"
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Applied when the payment gateway omits fee fields on ingest
+                  </span>
                 </label>
                 <label className="text-sm">
                   Treasury account ref

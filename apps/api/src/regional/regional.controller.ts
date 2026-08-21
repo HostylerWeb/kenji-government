@@ -19,28 +19,47 @@ export class RegionalController {
   constructor(private readonly regional: RegionalService) {}
 
   @Get("overview")
-  overview(@Query("days") days?: string) {
+  overview(
+    @Query("days") days?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
     const parsed = days ? Number(days) : 30;
-    return this.regional.getOverview(
-      Number.isFinite(parsed) ? parsed : 30,
-    );
+    return this.regional.getOverview({
+      days: Number.isFinite(parsed) ? parsed : 30,
+      from,
+      to,
+    });
   }
 
   @Get("counties/:county")
-  countyDetail(@Param("county") county: string, @Query("days") days?: string) {
+  countyDetail(
+    @Param("county") county: string,
+    @Query("days") days?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
     const parsed = days ? Number(days) : 30;
-    return this.regional.getCountyDetail(
-      decodeURIComponent(county),
-      Number.isFinite(parsed) ? parsed : 30,
-    );
+    return this.regional.getCountyDetail(decodeURIComponent(county), {
+      days: Number.isFinite(parsed) ? parsed : 30,
+      from,
+      to,
+    });
   }
 
   @Get("export")
-  async export(@Query("days") days?: string, @Res() reply?: FastifyReply) {
+  async export(
+    @Query("days") days?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Res() reply?: FastifyReply,
+  ) {
     const parsed = days ? Number(days) : 30;
-    const result = await this.regional.exportAnonymisedDataset(
-      Number.isFinite(parsed) ? parsed : 30,
-    );
+    const result = await this.regional.exportAnonymisedDataset({
+      days: Number.isFinite(parsed) ? parsed : 30,
+      from,
+      to,
+    });
 
     return reply!
       .header("Content-Type", result.mime_type)

@@ -15,18 +15,36 @@ type HourMatrix = Record<string, number[]>;
 export class RegionalService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getOverview(days = 30) {
-    const since = this.daysAgo(days);
+  async getOverview(options: { days?: number; from?: string; to?: string } = {}) {
+    const range = this.resolveDateRange(options);
+    const { from, to, days, label } = range;
     const counties = await this.getCountyCommercial();
-    const safety = await this.getSafetyByCounty(since);
-    const heatmap = await this.getNationalHeatmap(since);
-    const stakeBands = await this.getNationalStakeBands(since);
-    const ageBands = await this.getNationalAgeBands(since);
-    const countyPerformance = await this.buildCountyPerformance(counties, days);
-    const nationalSummary = await this.getNationalSummary(days, counties, countyPerformance);
+    const safety = await this.getSafetyByCounty(from, to);
+    const heatmap = await this.getNationalHeatmap(from, to);
+    const stakeBands = await this.getNationalStakeBands(from, to);
+    const ageBands = await this.getNationalAgeBands(from, to);
+    const countyPerformance = await this.buildCountyPerformance(
+      counties,
+      days,
+      from,
+      to,
+    );
+    const nationalSummary = await this.getNationalSummary(
+      days,
+      counties,
+      countyPerformance,
+      from,
+      to,
+      label,
+    );
 
     return {
       days,
+      date_range: {
+        from: from.toISOString().slice(0, 10),
+        to: to.toISOString().slice(0, 10),
+        label,
+      },
       national_summary: nationalSummary,
       county_performance: countyPerformance,
       counties,
@@ -40,25 +58,39 @@ export class RegionalService {
     };
   }
 
-  async getCountyDetail(county: string, days = 30) {
-    const since = this.daysAgo(days);
+  async getCountyDetail(
+    county: string,
+    options: { days?: number; from?: string; to?: string } = {},
+  ) {
     const normalizedCounty = county.trim();
+    const range = this.resolveDateRange(options);
+    const { from, to, days } = range;
 
     const operators = await this.prisma.client.operators.findMany({
       where: { county: normalizedCounty, status: "active" },
       select: {
+        id: true,
         external_id: true,
         trading_name: true,
         annual_ggr: true,
+        tax_paid: true,
+        tax_due: true,
         compliance_status: true,
       },
       orderBy: { trading_name: "asc" },
     });
 
+    const operatorPerformance = await this.getOperatorPeriodPerformance(
+      normalizedCounty,
+      from,
+      to,
+      operators,
+    );
+
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
       where: {
         county: normalizedCounty,
-        bucket_date: { gte: since },
+        bucket_date: { gte: from, lte: to },
       },
       orderBy: { bucket_date: "asc" },
     });
@@ -99,21 +131,40 @@ export class RegionalService {
       0,
     );
 
-    const growth = await this.getCountyGrowthMetrics(normalizedCounty, days);
+    const growth = await this.getCountyGrowthMetrics(normalizedCounty, days, from, to);
+
+    const periodTotals = operatorPerformance.reduce(
+      (acc, row) => ({
+        ggr: acc.ggr + row.period_ggr,
+        tax_paid: acc.tax_paid + row.period_tax_paid,
+        tax_outstanding: acc.tax_outstanding + row.tax_outstanding,
+      }),
+      { ggr: 0, tax_paid: 0, tax_outstanding: 0 },
+    );
 
     return {
       county: normalizedCounty,
       days,
-      operators,
+      date_range: {
+        from: from.toISOString().slice(0, 10),
+        to: to.toISOString().slice(0, 10),
+        label: range.label,
+      },
+      operators: operators.map(({ id: _id, ...operator }) => operator),
+      operator_performance: operatorPerformance.map(({ operator_id: _id, ...row }) => row),
+      period_totals: periodTotals,
       operator_count: operators.length,
       annual_ggr_total: ggrTotal,
       play_safe_activations: playSafeTotal,
       self_exclusion_requests: selfExclusionTotal,
       session_count: sessionTotal,
       sessions_change_pct: growth.sessions_change_pct,
+      sessions_change_label: growth.sessions_change_label,
       sessions_ytd_change_pct: growth.sessions_ytd_change_pct,
       play_safe_change_pct: growth.play_safe_change_pct,
+      play_safe_change_label: growth.play_safe_change_label,
       self_exclusion_change_pct: growth.self_exclusion_change_pct,
+      self_exclusion_change_label: growth.self_exclusion_change_label,
       ggr_ytd: growth.ggr_ytd,
       ggr_ytd_change_pct: growth.ggr_ytd_change_pct,
       ggr_ytd_change_label: growth.ggr_ytd_change_label,
@@ -131,10 +182,10 @@ export class RegionalService {
     };
   }
 
-  async exportAnonymisedDataset(days = 30) {
-    const since = this.daysAgo(days);
+  async exportAnonymisedDataset(options: { days?: number; from?: string; to?: string } = {}) {
+    const range = this.resolveDateRange(options);
     const rows = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: since } },
+      where: { bucket_date: { gte: range.from, lte: range.to } },
       orderBy: [{ bucket_date: "asc" }, { county: "asc" }],
     });
 
@@ -246,10 +297,158 @@ export class RegionalService {
     };
   }
 
-  private async getCountyGrowthMetrics(county: string, days: number) {
+  private resolveDateRange(options: {
+    days?: number;
+    from?: string;
+    to?: string;
+  }): { from: Date; to: Date; days: number; label: string } {
+    if (options.from && options.to) {
+      const from = this.parseDateOnly(options.from);
+      const to = this.parseDateEndOfDay(options.to);
+      if (from > to) {
+        const days = options.days ?? 30;
+        const fallbackTo = this.parseDateEndOfDay(new Date().toISOString().slice(0, 10));
+        const fallbackFrom = this.daysAgo(days);
+        return {
+          from: fallbackFrom,
+          to: fallbackTo,
+          days,
+          label: `Last ${days} days`,
+        };
+      }
+      const dayMs = 24 * 60 * 60 * 1000;
+      const days = Math.max(
+        1,
+        Math.round((to.getTime() - from.getTime()) / dayMs) + 1,
+      );
+      return {
+        from,
+        to,
+        days,
+        label: `${from.toISOString().slice(0, 10)} – ${to.toISOString().slice(0, 10)}`,
+      };
+    }
+
+    const days = options.days ?? 30;
+    const to = this.parseDateEndOfDay(new Date().toISOString().slice(0, 10));
+    const from = this.daysAgo(days);
+    return {
+      from,
+      to,
+      days,
+      label: `Last ${days} days`,
+    };
+  }
+
+  private parseDateOnly(value: string) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  }
+
+  private parseDateEndOfDay(value: string) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  }
+
+  private async getReportingPeriodsInRange(from: Date, to: Date) {
+    const periods = await this.prisma.client.reporting_periods.findMany({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+    });
+
+    return periods.filter((period) => {
+      const start = new Date(period.starts_at);
+      const end = new Date(period.ends_at);
+      end.setUTCHours(23, 59, 59, 999);
+      return start <= to && end >= from;
+    });
+  }
+
+  private async getOperatorPeriodPerformance(
+    county: string,
+    from: Date,
+    to: Date,
+    operators: Array<{
+      id: string;
+      external_id: string;
+      trading_name: string;
+      annual_ggr: Prisma.Decimal | null;
+      tax_paid: Prisma.Decimal | null;
+      tax_due: Prisma.Decimal | null;
+      compliance_status: string;
+    }>,
+  ) {
+    const periods = await this.getReportingPeriodsInRange(from, to);
+    const periodIds = periods.map((period) => period.id);
+
+    const snapshots =
+      periodIds.length > 0
+        ? await this.prisma.client.operator_monthly_snapshots.findMany({
+            where: {
+              reporting_period_id: { in: periodIds },
+              operator: { county, status: "active" },
+            },
+            select: {
+              operator_id: true,
+              gross_gaming_revenue: true,
+              tax_paid: true,
+            },
+          })
+        : [];
+
+    const totalsByOperator = new Map<
+      string,
+      { period_ggr: number; period_tax_paid: number }
+    >();
+
+    for (const row of snapshots) {
+      const entry = totalsByOperator.get(row.operator_id) ?? {
+        period_ggr: 0,
+        period_tax_paid: 0,
+      };
+      entry.period_ggr += Number(row.gross_gaming_revenue);
+      entry.period_tax_paid += Number(row.tax_paid);
+      totalsByOperator.set(row.operator_id, entry);
+    }
+
+    return operators
+      .map((operator) => {
+        const totals = totalsByOperator.get(operator.id) ?? {
+          period_ggr: 0,
+          period_tax_paid: 0,
+        };
+        const taxDue = Number(operator.tax_due ?? 0);
+        const taxPaid = Number(operator.tax_paid ?? 0);
+
+        return {
+          operator_id: operator.id,
+          external_id: operator.external_id,
+          trading_name: operator.trading_name,
+          compliance_status: operator.compliance_status,
+          annual_ggr: Number(operator.annual_ggr ?? 0),
+          period_ggr: totals.period_ggr,
+          period_tax_paid: totals.period_tax_paid,
+          tax_due: taxDue,
+          tax_outstanding: Math.max(taxDue - taxPaid, 0),
+        };
+      })
+      .sort((a, b) => b.period_ggr - a.period_ggr);
+  }
+
+  private async getCountyGrowthMetrics(
+    county: string,
+    days: number,
+    from?: Date,
+    to?: Date,
+  ) {
     const now = new Date();
-    const currentSince = this.daysAgo(days);
-    const priorSince = this.daysAgo(days * 2);
+    const currentSince =
+      from ?? this.daysAgo(days);
+    const currentTo = to ?? this.parseDateEndOfDay(now.toISOString().slice(0, 10));
+    const rangeMs = currentTo.getTime() - currentSince.getTime();
+    const priorTo = new Date(currentSince.getTime() - 1);
+    priorTo.setUTCHours(23, 59, 59, 999);
+    const priorSince = new Date(priorTo.getTime() - rangeMs);
+    priorSince.setUTCHours(0, 0, 0, 0);
     const ytdStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
     const priorYtdStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
     const priorYtdEnd = new Date(
@@ -259,7 +458,7 @@ export class RegionalService {
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
       where: {
         county,
-        bucket_date: { gte: priorSince },
+        bucket_date: { gte: priorSince, lte: currentTo },
       },
       select: {
         bucket_date: true,
@@ -277,7 +476,8 @@ export class RegionalService {
     let priorSelfExclusion = 0;
 
     for (const row of aggregates) {
-      const isCurrent = row.bucket_date >= currentSince;
+      const isCurrent =
+        row.bucket_date >= currentSince && row.bucket_date <= currentTo;
       const sessions = Number(row.session_count);
       const playSafe = Number(row.play_safe_activations);
       const selfExclusion = Number(row.self_exclusion_requests);
@@ -285,7 +485,7 @@ export class RegionalService {
         currentSessions += sessions;
         currentPlaySafe += playSafe;
         currentSelfExclusion += selfExclusion;
-      } else {
+      } else if (row.bucket_date >= priorSince && row.bucket_date <= priorTo) {
         priorSessions += sessions;
         priorPlaySafe += playSafe;
         priorSelfExclusion += selfExclusion;
@@ -306,6 +506,9 @@ export class RegionalService {
         priorSelfExclusion,
         currentSelfExclusion,
       ),
+      sessions_change_label: `vs prior ${days} days`,
+      play_safe_change_label: `vs prior ${days} days`,
+      self_exclusion_change_label: `vs prior ${days} days`,
       ggr_ytd: ggrGrowth.ggr_ytd,
       ggr_ytd_change_pct: ggrGrowth.ggr_ytd_change_pct,
       ggr_ytd_change_label: ggrGrowth.ggr_ytd_change_label,
@@ -365,6 +568,27 @@ export class RegionalService {
     );
   }
 
+  private async sumSessionsInRange(from: Date, to: Date, county?: string) {
+    const where: Prisma.player_safety_aggregatesWhereInput = {
+      bucket_date: { gte: from, lte: to },
+    };
+    if (county) where.county = county;
+    const result = await this.prisma.client.player_safety_aggregates.aggregate({
+      where,
+      _sum: { session_count: true },
+    });
+    return Number(result._sum.session_count ?? 0);
+  }
+
+  private getComparisonPeriod(from: Date, to: Date) {
+    const rangeMs = to.getTime() - from.getTime();
+    const priorTo = new Date(from.getTime() - 1);
+    priorTo.setUTCHours(23, 59, 59, 999);
+    const priorSince = new Date(priorTo.getTime() - rangeMs);
+    priorSince.setUTCHours(0, 0, 0, 0);
+    return { priorSince, priorTo };
+  }
+
   private async getNationalSummary(
     days: number,
     counties: Array<{ county: string; annual_ggr: number }>,
@@ -372,10 +596,12 @@ export class RegionalService {
       county: string;
       sessions_change_pct: number | null;
     }>,
+    from: Date,
+    to: Date,
+    rangeLabel: string,
   ) {
     const now = new Date();
-    const currentSince = this.daysAgo(days);
-    const priorSince = this.daysAgo(days * 2);
+    const { priorSince, priorTo } = this.getComparisonPeriod(from, to);
 
     const ytdStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
     const priorYtdStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
@@ -385,8 +611,8 @@ export class RegionalService {
 
     const [currentSessions, priorSessions, ytdSessions, priorYtdSessions, ggrGrowth] =
       await Promise.all([
-        this.sumSessions(currentSince),
-        this.sumSessions(priorSince, currentSince),
+        this.sumSessionsInRange(from, to),
+        this.sumSessionsInRange(priorSince, priorTo),
         this.sumSessions(ytdStart),
         this.sumSessions(priorYtdStart, priorYtdEnd),
         this.getGgrGrowthSummary(),
@@ -432,12 +658,13 @@ export class RegionalService {
       annual_ggr: number;
     }>,
     days: number,
+    from: Date,
+    to: Date,
   ) {
-    const currentSince = this.daysAgo(days);
-    const priorSince = this.daysAgo(days * 2);
+    const { priorSince, priorTo } = this.getComparisonPeriod(from, to);
 
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: priorSince } },
+      where: { bucket_date: { gte: priorSince, lte: to } },
       select: {
         county: true,
         bucket_date: true,
@@ -450,8 +677,11 @@ export class RegionalService {
     const priorByCounty = new Map<string, { sessions: number; play_safe: number }>();
 
     for (const row of aggregates) {
-      const target =
-        row.bucket_date >= currentSince ? currentByCounty : priorByCounty;
+      const isCurrent = row.bucket_date >= from && row.bucket_date <= to;
+      const target = isCurrent ? currentByCounty : priorByCounty;
+      if (!isCurrent && (row.bucket_date < priorSince || row.bucket_date > priorTo)) {
+        continue;
+      }
       const entry = target.get(row.county) ?? { sessions: 0, play_safe: 0 };
       entry.sessions += Number(row.session_count);
       entry.play_safe += Number(row.play_safe_activations);
@@ -570,9 +800,9 @@ export class RegionalService {
       .sort((a, b) => b.annual_ggr - a.annual_ggr);
   }
 
-  private async getSafetyByCounty(since: Date) {
+  private async getSafetyByCounty(from: Date, to: Date) {
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: since } },
+      where: { bucket_date: { gte: from, lte: to } },
     });
 
     const playSafe = new Map<string, number>();
@@ -600,9 +830,9 @@ export class RegionalService {
     };
   }
 
-  private async getNationalHeatmap(since: Date) {
+  private async getNationalHeatmap(from: Date, to: Date) {
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: since } },
+      where: { bucket_date: { gte: from, lte: to } },
       select: { hour_by_day_matrix: true },
     });
 
@@ -618,9 +848,9 @@ export class RegionalService {
     };
   }
 
-  private async getNationalStakeBands(since: Date) {
+  private async getNationalStakeBands(from: Date, to: Date) {
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: since } },
+      where: { bucket_date: { gte: from, lte: to } },
       select: { stake_band_distribution: true },
     });
 
@@ -638,9 +868,9 @@ export class RegionalService {
     }));
   }
 
-  private async getNationalAgeBands(since: Date) {
+  private async getNationalAgeBands(from: Date, to: Date) {
     const aggregates = await this.prisma.client.player_safety_aggregates.findMany({
-      where: { bucket_date: { gte: since } },
+      where: { bucket_date: { gte: from, lte: to } },
       select: { age_band_distribution: true },
     });
 

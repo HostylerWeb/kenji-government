@@ -102,7 +102,9 @@ export default function PaymentTransactionsPage() {
               <th className="px-3 py-2">Reference</th>
               <th className="px-3 py-2">Operator</th>
               <th className="px-3 py-2">Gross</th>
+              <th className="px-3 py-2">Gateway fee</th>
               <th className="px-3 py-2">Tax</th>
+              <th className="px-3 py-2">Operator net</th>
               <th className="px-3 py-2">KYC</th>
               <th className="px-3 py-2">AML</th>
               <th className="px-3 py-2">Status</th>
@@ -115,8 +117,17 @@ export default function PaymentTransactionsPage() {
                   {tx.external_transaction_id}
                 </td>
                 <td className="px-3 py-2">{tx.operator_name}</td>
-                <td className="px-3 py-2">{formatKsh(tx.gross_amount)}</td>
-                <td className="px-3 py-2">{formatKsh(tx.tax_amount)}</td>
+                <td className="px-3 py-2 tabular-nums">{formatKsh(tx.gross_amount)}</td>
+                <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                  {formatKsh(tx.gateway_fee_amount)}
+                  <span className="ml-1 text-xs">
+                    ({Math.round(Number(tx.gateway_fee_rate) * 10000) / 100}%)
+                  </span>
+                </td>
+                <td className="px-3 py-2 tabular-nums">{formatKsh(tx.tax_amount)}</td>
+                <td className="px-3 py-2 tabular-nums font-medium">
+                  {formatKsh(tx.operator_net)}
+                </td>
                 <td className="px-3 py-2 capitalize">{tx.kyc_status}</td>
                 <td className="px-3 py-2">
                   {tx.has_aml_alert || tx.aml_risk_score >= 50 ? (

@@ -4,7 +4,7 @@ import { join } from "path";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: join(__dirname, "../../"),
-  transpilePackages: ["@kenji-government/shared"],
+  transpilePackages: ["@kenji-government/shared", "mapbox-gl"],
 };
 
 export default nextConfig;

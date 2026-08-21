@@ -1,4 +1,5 @@
 @import "leaflet/dist/leaflet.css";
+@import "mapbox-gl/dist/mapbox-gl.css";
 
 @tailwind base;
 @tailwind components;
@@ -154,6 +155,28 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 0;
   font-family: inherit;
   border-radius: var(--radius);
+}
+
+/* ─── Mapbox ────────────────────────────────────────────────── */
+.mapboxgl-map {
+  font-family: inherit;
+}
+
+.mapboxgl-ctrl-group {
+  @apply overflow-hidden rounded-md border border-border bg-card shadow-sm;
+}
+
+.mapboxgl-ctrl-group button {
+  @apply bg-card;
+}
+
+.county-map-popup .mapboxgl-popup-content {
+  @apply rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg;
+  padding: 0;
+}
+
+.county-map-popup .mapboxgl-popup-tip {
+  border-top-color: hsl(var(--color-card));
 }
 
 /* ─── Transitions ───────────────────────────────────────────── */

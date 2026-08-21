@@ -576,6 +576,8 @@ model payment_transactions {
   operator_amount         Decimal                    @db.Decimal(18, 2)
   tax_amount              Decimal                    @db.Decimal(18, 2)
   tax_rate                Decimal                    @db.Decimal(5, 4)
+  gateway_fee_rate        Decimal                    @default(0) @db.Decimal(5, 4)
+  gateway_fee_amount      Decimal                    @default(0) @db.Decimal(18, 2)
   currency                String                     @default("KES")
   status                  payment_transaction_status @default(pending)
   kyc_status              kyc_status                 @default(pending)

@@ -67,6 +67,10 @@ export class GatewayPaymentService {
     const gross = data.gross_amount;
     const taxAmount = data.tax_amount ?? roundMoney(gross * taxRate);
     const operatorAmount = data.operator_amount ?? roundMoney(gross - taxAmount);
+    const gatewayFeeRate =
+      data.gateway_fee_rate ?? (await this.settings.getGatewayFeeRate());
+    const gatewayFeeAmount =
+      data.gateway_fee_amount ?? roundMoney(gross * gatewayFeeRate);
 
     const completedAt = data.completed_at
       ? new Date(data.completed_at)
@@ -92,6 +96,8 @@ export class GatewayPaymentService {
         operator_amount: operatorAmount,
         tax_amount: taxAmount,
         tax_rate: taxRate,
+        gateway_fee_rate: gatewayFeeRate,
+        gateway_fee_amount: gatewayFeeAmount,
         currency: data.currency,
         status: "completed",
         kyc_status: data.kyc_status ?? "pending",

@@ -4,6 +4,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import {
+  GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT,
   GOVERNMENT_TAX_RATE_DEFAULT,
   encryptIngestSecret,
   decryptIngestSecret,
@@ -18,6 +19,7 @@ import type { Prisma } from "@prisma/client";
 
 type PublicSystemSettings = {
   tax_rate: number;
+  gateway_fee_rate: number;
   smtp: {
     host: string | null;
     port: number | null;
@@ -43,6 +45,17 @@ export class SettingsService {
     }
     const rate = (row.value as { rate?: number }).rate;
     return typeof rate === "number" ? rate : GOVERNMENT_TAX_RATE_DEFAULT;
+  }
+
+  async getGatewayFeeRate(): Promise<number> {
+    const row = await this.prisma.client.system_settings.findUnique({
+      where: { key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE },
+    });
+    if (!row?.value || typeof row.value !== "object") {
+      return GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT;
+    }
+    const rate = (row.value as { rate?: number }).rate;
+    return typeof rate === "number" ? rate : GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT;
   }
 
   async getTreasuryAccountRef(): Promise<string> {
@@ -94,6 +107,7 @@ export class SettingsService {
 
   async getPublicSettings(user: AuthUser): Promise<PublicSystemSettings> {
     const taxRate = await this.getTaxRate();
+    const gatewayFeeRate = await this.getGatewayFeeRate();
     const smtpRow = await this.prisma.client.system_settings.findUnique({
       where: { key: SYSTEM_SETTING_KEYS.SMTP },
     });
@@ -130,6 +144,7 @@ export class SettingsService {
 
     return {
       tax_rate: taxRate,
+      gateway_fee_rate: gatewayFeeRate,
       smtp: {
         host: smtpValue.host ?? null,
         port: smtpValue.port ?? null,
@@ -161,6 +176,14 @@ export class SettingsService {
       await this.upsertSetting(
         SYSTEM_SETTING_KEYS.TAX_RATE,
         { rate: data.tax_rate.rate },
+        user.id,
+      );
+    }
+
+    if (data.gateway_fee_rate) {
+      await this.upsertSetting(
+        SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE,
+        { rate: data.gateway_fee_rate.rate },
         user.id,
       );
     }

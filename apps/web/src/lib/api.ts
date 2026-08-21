@@ -1036,6 +1036,11 @@ export interface RegionalNationalSummary {
 
 export interface RegionalOverview {
   days: number;
+  date_range: {
+    from: string;
+    to: string;
+    label: string;
+  };
   national_summary: RegionalNationalSummary;
   county_performance: RegionalCountyPerformance[];
   counties: RegionalCountyCommercial[];
@@ -1051,24 +1056,49 @@ export interface RegionalOverview {
   disclaimer: string;
 }
 
+export interface RegionalCountyOperatorPerformance {
+  external_id: string;
+  trading_name: string;
+  compliance_status: string;
+  annual_ggr: number;
+  period_ggr: number;
+  period_tax_paid: number;
+  tax_due: number;
+  tax_outstanding: number;
+}
+
 export interface RegionalCountyDetail {
   county: string;
   days: number;
+  date_range: {
+    from: string;
+    to: string;
+    label: string;
+  };
   operators: Array<{
     external_id: string;
     trading_name: string;
     annual_ggr: string | null;
     compliance_status: string;
   }>;
+  operator_performance: RegionalCountyOperatorPerformance[];
+  period_totals: {
+    ggr: number;
+    tax_paid: number;
+    tax_outstanding: number;
+  };
   operator_count: number;
   annual_ggr_total: number;
   play_safe_activations: number;
   self_exclusion_requests: number;
   session_count: number;
   sessions_change_pct: number | null;
+  sessions_change_label: string;
   sessions_ytd_change_pct: number | null;
   play_safe_change_pct: number | null;
+  play_safe_change_label: string;
   self_exclusion_change_pct: number | null;
+  self_exclusion_change_label: string;
   ggr_ytd: number;
   ggr_ytd_change_pct: number | null;
   ggr_ytd_change_label: string;
@@ -1084,19 +1114,50 @@ export interface RegionalCountyDetail {
   disclaimer: string;
 }
 
-export async function getRegionalOverview(token: string, days = 30) {
-  return apiRequest<RegionalOverview>(`/regional/overview?days=${days}`, { token });
+export async function getRegionalOverview(
+  token: string,
+  params?: { days?: number; from?: string; to?: string },
+) {
+  const search = new URLSearchParams();
+  if (params?.from && params?.to) {
+    search.set("from", params.from);
+    search.set("to", params.to);
+  } else {
+    search.set("days", String(params?.days ?? 30));
+  }
+  return apiRequest<RegionalOverview>(`/regional/overview?${search.toString()}`, { token });
 }
 
-export async function getRegionalCounty(token: string, county: string, days = 30) {
+export async function getRegionalCounty(
+  token: string,
+  county: string,
+  params?: { days?: number; from?: string; to?: string },
+) {
+  const search = new URLSearchParams();
+  if (params?.from && params?.to) {
+    search.set("from", params.from);
+    search.set("to", params.to);
+  } else {
+    search.set("days", String(params?.days ?? 30));
+  }
   return apiRequest<RegionalCountyDetail>(
-    `/regional/counties/${encodeURIComponent(county)}?days=${days}`,
+    `/regional/counties/${encodeURIComponent(county)}?${search.toString()}`,
     { token },
   );
 }
 
-export async function exportRegionalDataset(token: string, days = 30) {
-  const response = await fetch(`${API_URL}/regional/export?days=${days}`, {
+export async function exportRegionalDataset(
+  token: string,
+  params?: { days?: number; from?: string; to?: string },
+) {
+  const search = new URLSearchParams();
+  if (params?.from && params?.to) {
+    search.set("from", params.from);
+    search.set("to", params.to);
+  } else {
+    search.set("days", String(params?.days ?? 30));
+  }
+  const response = await fetch(`${API_URL}/regional/export?${search.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
@@ -1117,6 +1178,7 @@ export async function exportRegionalDataset(token: string, days = 30) {
 
 export type SystemSettings = {
   tax_rate: number;
+  gateway_fee_rate: number;
   smtp: {
     host: string | null;
     port: number | null;
@@ -1166,6 +1228,9 @@ export type PaymentTransaction = {
   operator_amount: string;
   tax_amount: string;
   tax_rate: string;
+  gateway_fee_rate: string;
+  gateway_fee_amount: string;
+  operator_net: string;
   currency: string;
   status: string;
   kyc_status: string;
@@ -1314,7 +1379,10 @@ export async function getPaymentOperatorStats(token: string) {
       failed_count: number;
       failure_rate: number;
       gross_total: string;
+      gateway_fee_rate: number;
+      gateway_fee_total: string;
       tax_total: string;
+      operator_net_total: string;
     }>
   >("/payments/operator-stats", { token });
 }

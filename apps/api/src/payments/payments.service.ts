@@ -519,7 +519,12 @@ export class PaymentsService {
     const grouped = await this.prisma.client.payment_transactions.groupBy({
       by: ["operator_id", "status"],
       _count: { _all: true },
-      _sum: { gross_amount: true, tax_amount: true },
+      _sum: {
+        gross_amount: true,
+        tax_amount: true,
+        gateway_fee_amount: true,
+        operator_amount: true,
+      },
     });
 
     const operators = await this.prisma.client.operators.findMany({
@@ -535,6 +540,8 @@ export class PaymentsService {
         failed: number;
         gross_total: number;
         tax_total: number;
+        gateway_fee_total: number;
+        operator_net_total: number;
       }
     >();
 
@@ -546,6 +553,8 @@ export class PaymentsService {
         failed: 0,
         gross_total: 0,
         tax_total: 0,
+        gateway_fee_total: 0,
+        operator_net_total: 0,
       });
     }
 
@@ -556,6 +565,10 @@ export class PaymentsService {
         entry.completed = row._count._all;
         entry.gross_total += Number(row._sum.gross_amount ?? 0);
         entry.tax_total += Number(row._sum.tax_amount ?? 0);
+        entry.gateway_fee_total += Number(row._sum.gateway_fee_amount ?? 0);
+        entry.operator_net_total +=
+          Number(row._sum.operator_amount ?? 0) -
+          Number(row._sum.gateway_fee_amount ?? 0);
       } else if (row.status === "failed") {
         entry.failed = row._count._all;
       }
@@ -565,6 +578,10 @@ export class PaymentsService {
       .filter((o) => o.completed > 0 || o.failed > 0)
       .map((o) => {
         const attempted = o.completed + o.failed;
+        const effectiveFeeRate =
+          o.gross_total > 0
+            ? Math.round((o.gateway_fee_total / o.gross_total) * 10000) / 100
+            : 0;
         return {
           operator_external_id: o.external_id,
           trading_name: o.trading_name,
@@ -573,7 +590,10 @@ export class PaymentsService {
           failure_rate:
             attempted > 0 ? Math.round((o.failed / attempted) * 100) : 0,
           gross_total: o.gross_total.toFixed(2),
+          gateway_fee_rate: effectiveFeeRate,
+          gateway_fee_total: o.gateway_fee_total.toFixed(2),
           tax_total: o.tax_total.toFixed(2),
+          operator_net_total: o.operator_net_total.toFixed(2),
         };
       })
       .sort((a, b) => Number(b.gross_total) - Number(a.gross_total));
@@ -588,6 +608,8 @@ export class PaymentsService {
       operator_amount: { toString: () => string };
       tax_amount: { toString: () => string };
       tax_rate: { toString: () => string };
+      gateway_fee_rate: { toString: () => string };
+      gateway_fee_amount: { toString: () => string };
       currency: string;
       status: string;
       kyc_status: string;
@@ -607,6 +629,12 @@ export class PaymentsService {
       operator_amount: row.operator_amount.toString(),
       tax_amount: row.tax_amount.toString(),
       tax_rate: row.tax_rate.toString(),
+      gateway_fee_rate: row.gateway_fee_rate.toString(),
+      gateway_fee_amount: row.gateway_fee_amount.toString(),
+      operator_net: (
+        Number(row.operator_amount.toString()) -
+        Number(row.gateway_fee_amount.toString())
+      ).toFixed(2),
       currency: row.currency,
       status: row.status,
       kyc_status: row.kyc_status,

@@ -14,6 +14,8 @@ export const gatewayPaymentSchema = z.object({
   completed_at: z.string().datetime().optional(),
   operator_amount: z.number().nonnegative().optional(),
   tax_amount: z.number().nonnegative().optional(),
+  gateway_fee_rate: z.number().min(0).max(1).optional(),
+  gateway_fee_amount: z.number().nonnegative().optional(),
 });
 
 export type GatewayPaymentInput = z.infer<typeof gatewayPaymentSchema>;

@@ -8,6 +8,7 @@ INGEST_URL="${GRA_INGEST_URL:-http://localhost:4001/v1}"
 API_KEY="${GRA_API_KEY:-gra_sandbox_op001_devkey0001}"
 HMAC_SECRET="${GRA_HMAC_SECRET:-sandbox_hmac_op001_secret_32chars_min}"
 TAX_RATE="${TAX_RATE:-0.30}"
+GATEWAY_FEE_RATE="${GATEWAY_FEE_RATE:-0.025}"
 
 AMOUNT="${1:-100}"
 CARD="${2:-4242424242424242}"
@@ -53,13 +54,14 @@ idem_key="gw-sim-${external_id}"
 if [[ "$accepted" == true ]]; then
   tax_amount=$(awk "BEGIN { printf \"%.2f\", $AMOUNT * $TAX_RATE }")
   operator_amount=$(awk "BEGIN { printf \"%.2f\", $AMOUNT - $tax_amount }")
+  gateway_fee_amount=$(awk "BEGIN { printf \"%.2f\", $AMOUNT * $GATEWAY_FEE_RATE }")
 
   body=$(cat <<EOF
-{"external_transaction_id":"${external_id}","gross_amount":${AMOUNT},"currency":"KES","status":"completed","ticket_reference":"${TICKET_REF}","tax_amount":${tax_amount},"operator_amount":${operator_amount}}
+{"external_transaction_id":"${external_id}","gross_amount":${AMOUNT},"currency":"KES","status":"completed","ticket_reference":"${TICKET_REF}","tax_amount":${tax_amount},"operator_amount":${operator_amount},"gateway_fee_rate":${GATEWAY_FEE_RATE},"gateway_fee_amount":${gateway_fee_amount}}
 EOF
 )
 
-  echo "Gateway simulator: ACCEPT ${AMOUNT} KES (tax ${tax_amount})"
+  echo "Gateway simulator: ACCEPT ${AMOUNT} KES (tax ${tax_amount}, gateway fee ${gateway_fee_amount})"
   echo "POST ${INGEST_URL}/gateway/notify"
   notify_gra "$body" "$idem_key" | jq .
 else

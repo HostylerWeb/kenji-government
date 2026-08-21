@@ -1,5 +1,5 @@
 import { PrismaClient, user_role, report_category } from "@prisma/client";
-import { REPORT_SLUGS, SYSTEM_SETTING_KEYS, GOVERNMENT_TAX_RATE_DEFAULT } from "@kenji-government/shared";
+import { REPORT_SLUGS, SYSTEM_SETTING_KEYS, GOVERNMENT_TAX_RATE_DEFAULT, GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT } from "@kenji-government/shared";
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import { config as loadEnv } from "dotenv";
@@ -1077,6 +1077,16 @@ async function main() {
   });
 
   await prisma.system_settings.upsert({
+    where: { key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE },
+    update: { value: { rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT } },
+    create: {
+      key: SYSTEM_SETTING_KEYS.GATEWAY_FEE_RATE,
+      value: { rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT },
+      updated_by: superAdmin?.id,
+    },
+  });
+
+  await prisma.system_settings.upsert({
     where: { key: SYSTEM_SETTING_KEYS.TREASURY_ACCOUNT_REF },
     update: { value: { account_ref: "KE-TREASURY-GRA-001" } },
     create: {
@@ -1106,7 +1116,15 @@ async function main() {
   });
 
   if (demoSite) {
-    console.log("Seeding sample gateway payment (100 KSH / 30 KSH tax)...");
+    const seedGross = 100;
+    const seedTax = Math.round(seedGross * GOVERNMENT_TAX_RATE_DEFAULT * 100) / 100;
+    const seedOperatorAmount = Math.round((seedGross - seedTax) * 100) / 100;
+    const seedGatewayFee =
+      Math.round(seedGross * GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT * 100) / 100;
+
+    console.log(
+      `Seeding sample gateway payment (${seedGross} KSH gross / ${seedTax} tax / ${seedGatewayFee} gateway fee)...`,
+    );
     const externalId = "hpay-seed-demo-100";
     const existingPayment = await prisma.payment_transactions.findUnique({
       where: { external_transaction_id: externalId },
@@ -1123,10 +1141,12 @@ async function main() {
             operator_id: op.id,
             operator_site_id: demoSite.id,
             ticket_reference: "TKT-SEED-100",
-            gross_amount: 100,
-            operator_amount: 70,
-            tax_amount: 30,
+            gross_amount: seedGross,
+            operator_amount: seedOperatorAmount,
+            tax_amount: seedTax,
             tax_rate: GOVERNMENT_TAX_RATE_DEFAULT,
+            gateway_fee_rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT,
+            gateway_fee_amount: seedGatewayFee,
             currency: "KES",
             status: "completed",
             kyc_status: "verified",
@@ -1145,6 +1165,14 @@ async function main() {
           },
         });
       }
+    } else if (Number(existingPayment.gateway_fee_amount) === 0) {
+      await prisma.payment_transactions.update({
+        where: { id: existingPayment.id },
+        data: {
+          gateway_fee_rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT,
+          gateway_fee_amount: seedGatewayFee,
+        },
+      });
     }
 
     const payment =
@@ -1172,6 +1200,24 @@ async function main() {
         });
       }
     }
+  }
+
+  const zeroFeePayments = await prisma.payment_transactions.findMany({
+    where: {
+      status: "completed",
+      gateway_fee_amount: 0,
+    },
+  });
+  for (const payment of zeroFeePayments) {
+    const gross = Number(payment.gross_amount);
+    const fee = Math.round(gross * GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT * 100) / 100;
+    await prisma.payment_transactions.update({
+      where: { id: payment.id },
+      data: {
+        gateway_fee_rate: GOVERNMENT_GATEWAY_FEE_RATE_DEFAULT,
+        gateway_fee_amount: fee,
+      },
+    });
   }
 
   console.log("Seed complete.");

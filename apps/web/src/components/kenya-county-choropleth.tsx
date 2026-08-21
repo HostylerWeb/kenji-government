@@ -1,61 +1,114 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { GeoJSON, Layer, Map as LeafletMap } from "leaflet";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { countyLookupKey } from "@/lib/county-names";
-import { formatKsh, formatNumber } from "@/lib/utils";
+import {
+  CHOROPLETH_COLORS,
+  getMapboxAccessToken,
+} from "@/lib/mapbox";
+import {
+  formatMetricValue,
+  METRIC_LABELS,
+  metricValue,
+  type ChoroplethMetric,
+  type CountyChoroplethRow,
+  type CountyFeatureCollection,
+} from "@/lib/regional-map";
 
-export type ChoroplethMetric = "annual_ggr" | "sessions" | "play_safe";
+export type { ChoroplethMetric, CountyChoroplethRow };
 
-export type CountyChoroplethRow = {
-  county: string;
-  annual_ggr: number;
-  sessions: number;
-  play_safe: number;
-  operator_count?: number;
-  sessions_change_pct?: number | null;
-};
+function ChoroplethLegend({ metric, overlay }: { metric: ChoroplethMetric; overlay?: boolean }) {
+  const content = (
+    <>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Low
+      </span>
+      <div className="flex overflow-hidden rounded-sm border border-white/80 shadow-inner">
+        {CHOROPLETH_COLORS.map((color) => (
+          <span key={color} className="h-3 w-7" style={{ backgroundColor: color }} />
+        ))}
+      </div>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        High
+      </span>
+    </>
+  );
 
-const METRIC_LABELS: Record<ChoroplethMetric, string> = {
-  annual_ggr: "Annual GGR",
-  sessions: "Player sessions",
-  play_safe: "Play Safe activations",
-};
+  if (overlay) {
+    return (
+      <div className="pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-lg border border-border/70 bg-card/95 px-3 py-2 shadow-md backdrop-blur-sm">
+        {content}
+      </div>
+    );
+  }
 
-const HEAT_COLORS = ["#e5f5e0", "#a1d99b", "#74c476", "#31a354", "#006837"];
-
-function heatColor(value: number, max: number): string {
-  if (max <= 0 || value <= 0) return HEAT_COLORS[0];
-  const ratio = value / max;
-  if (ratio > 0.8) return HEAT_COLORS[4];
-  if (ratio > 0.5) return HEAT_COLORS[3];
-  if (ratio > 0.25) return HEAT_COLORS[2];
-  if (ratio > 0.1) return HEAT_COLORS[1];
-  return HEAT_COLORS[0];
+  return (
+    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs text-muted-foreground">
+        Shaded by {METRIC_LABELS[metric].toLowerCase()}. Hover for detail — click any county to drill down.
+      </p>
+      <div className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 shadow-sm">
+        {content}
+      </div>
+    </div>
+  );
 }
 
-function formatMetricValue(metric: ChoroplethMetric, value: number): string {
-  if (metric === "annual_ggr") return formatKsh(value);
-  return formatNumber(value);
+function MapLoading({ height }: { height: number }) {
+  return (
+    <div
+      className="flex items-center justify-center rounded-lg border border-border bg-secondary/30 text-sm text-muted-foreground"
+      style={{ height }}
+    >
+      Loading county map…
+    </div>
+  );
 }
+
+function MapUnavailable({ reason, height = 480 }: { reason: string; height?: number }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-secondary/30 px-6 text-center"
+      style={{ height }}
+    >
+      <p className="text-sm font-medium text-foreground">County map unavailable</p>
+      <p className="max-w-md text-xs text-muted-foreground">{reason}</p>
+    </div>
+  );
+}
+
+const KenyaCountyMapboxMap = dynamic(
+  () => import("./kenya-county-mapbox-map").then((mod) => mod.KenyaCountyMapboxMap),
+  {
+    ssr: false,
+    loading: () => <MapLoading height={480} />,
+  },
+);
 
 export function KenyaCountyChoropleth({
   data,
   metric = "annual_ggr",
   selectedCounty,
+  highlightCounty,
   onCountySelect,
+  onCountyHover,
+  height = 480,
+  legendOverlay = true,
 }: {
   data: CountyChoroplethRow[];
   metric?: ChoroplethMetric;
   selectedCounty?: string | null;
+  highlightCounty?: string | null;
   onCountySelect?: (county: string) => void;
+  onCountyHover?: (county: string | null) => void;
+  height?: number;
+  legendOverlay?: boolean;
 }) {
-  const router = useRouter();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const layerRef = useRef<GeoJSON | null>(null);
+  const token = getMapboxAccessToken();
   const [geoJson, setGeoJson] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [geoLoading, setGeoLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const valueByCounty = useMemo(() => {
     const map = new Map<string, CountyChoroplethRow>();
@@ -66,157 +119,95 @@ export function KenyaCountyChoropleth({
   }, [data]);
 
   const maxValue = useMemo(() => {
-    return Math.max(
-      ...data.map((row) =>
-        metric === "annual_ggr"
-          ? row.annual_ggr
-          : metric === "sessions"
-            ? row.sessions
-            : row.play_safe,
-      ),
-      1,
-    );
+    return Math.max(...data.map((row) => metricValue(row, metric)), 1);
   }, [data, metric]);
 
+  const enrichedGeoJson = useMemo((): CountyFeatureCollection | null => {
+    if (!geoJson) return null;
+
+    return {
+      type: "FeatureCollection",
+      features: geoJson.features.map((feature) => {
+        const shapeName = String(feature.properties?.shapeName ?? "");
+        const row = valueByCounty.get(countyLookupKey(shapeName));
+        const value = row ? metricValue(row, metric) : 0;
+        const isSelected = Boolean(
+          selectedCounty && countyLookupKey(selectedCounty) === countyLookupKey(shapeName),
+        );
+        const isHighlighted = Boolean(
+          highlightCounty && countyLookupKey(highlightCounty) === countyLookupKey(shapeName),
+        );
+
+        return {
+          ...feature,
+          properties: {
+            shapeName,
+            metricValue: value,
+            dbCounty: row?.county ?? shapeName,
+            sessionsChangePct: row?.sessions_change_pct ?? null,
+            isSelected,
+            isHighlighted,
+          },
+        };
+      }),
+    };
+  }, [geoJson, valueByCounty, metric, selectedCounty, highlightCounty]);
+
   useEffect(() => {
+    setGeoLoading(true);
+    setLoadError(false);
     fetch("/data/kenya-counties.geojson")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load counties");
+        return res.json();
+      })
       .then(setGeoJson)
-      .catch(() => setGeoJson(null));
+      .catch(() => {
+        setGeoJson(null);
+        setLoadError(true);
+      })
+      .finally(() => setGeoLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!containerRef.current || !geoJson) return;
-
-    let cancelled = false;
-
-    async function initMap() {
-      const L = await import("leaflet");
-
-      if (cancelled || !containerRef.current) return;
-
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        layerRef.current = null;
-      }
-
-      const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView(
-        [-0.5, 37.5],
-        6,
-      );
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
-        maxZoom: 18,
-      }).addTo(map);
-
-      const geoLayer = L.geoJSON(geoJson, {
-        style: (feature) => {
-          const shapeName = String(feature?.properties?.shapeName ?? "");
-          const row = valueByCounty.get(countyLookupKey(shapeName));
-          const value = row
-            ? metric === "annual_ggr"
-              ? row.annual_ggr
-              : metric === "sessions"
-                ? row.sessions
-                : row.play_safe
-            : 0;
-          const isSelected =
-            selectedCounty &&
-            countyLookupKey(selectedCounty) === countyLookupKey(shapeName);
-
-          return {
-            fillColor: heatColor(value, maxValue),
-            weight: isSelected ? 3 : 1.5,
-            opacity: 1,
-            color: isSelected ? "#0B3D91" : "#ffffff",
-            fillOpacity: 0.75,
-          };
-        },
-        onEachFeature: (feature, layer) => {
-          const shapeName = String(feature?.properties?.shapeName ?? "");
-          const row = valueByCounty.get(countyLookupKey(shapeName));
-          const value = row
-            ? metric === "annual_ggr"
-              ? row.annual_ggr
-              : metric === "sessions"
-                ? row.sessions
-                : row.play_safe
-            : 0;
-          const change =
-            row?.sessions_change_pct !== undefined && row?.sessions_change_pct !== null
-              ? `<br/>Session change: ${row.sessions_change_pct > 0 ? "+" : ""}${row.sessions_change_pct}%`
-              : "";
-
-          layer.bindTooltip(
-            `<strong>${shapeName}</strong><br/>${METRIC_LABELS[metric]}: ${formatMetricValue(metric, value)}${change}<br/><span style="opacity:0.8">Click for county detail</span>`,
-          );
-
-          layer.on("click", () => {
-            const dbCounty = row?.county ?? shapeName;
-            onCountySelect?.(dbCounty);
-            router.push(`/regional/${encodeURIComponent(dbCounty)}`);
-          });
-
-          layer.on("mouseover", (event) => {
-            const target = event.target as Layer & { setStyle?: (style: object) => void };
-            target.setStyle?.({ weight: 2.5, fillOpacity: 0.9 });
-          });
-
-          layer.on("mouseout", (event) => {
-            const target = event.target as Layer & { setStyle?: (style: object) => void };
-            geoLayer.resetStyle(target);
-          });
-        },
-      }).addTo(map);
-
-      layerRef.current = geoLayer;
-      mapRef.current = map;
-    }
-
-    initMap().catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, [geoJson, valueByCounty, metric, maxValue, selectedCounty, onCountySelect, router]);
-
-  if (!geoJson) {
+  if (!token) {
     return (
-      <div className="flex h-80 items-center justify-center rounded-lg border border-border bg-secondary/30 text-sm text-muted-foreground">
-        Loading county map…
+      <div>
+        <MapUnavailable reason="Set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your environment to enable the interactive map." height={height} />
+        <ChoroplethLegend metric={metric} overlay={false} />
+      </div>
+    );
+  }
+
+  if (geoLoading) {
+    return <MapLoading height={height} />;
+  }
+
+  if (loadError || !enrichedGeoJson) {
+    return (
+      <div>
+        <MapUnavailable reason="Could not load Kenya county boundaries. Try refreshing the page." height={height} />
+        <ChoroplethLegend metric={metric} overlay={false} />
       </div>
     );
   }
 
   return (
     <div>
-      <div
-        ref={containerRef}
-        className="h-[420px] w-full rounded-lg border border-border z-0"
-        aria-label="Kenya county heatmap"
-      />
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          Counties shaded by {METRIC_LABELS[metric].toLowerCase()}. Click a county to drill down.
-        </p>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Low</span>
-          {HEAT_COLORS.map((color) => (
-            <span
-              key={color}
-              className="h-3 w-6 rounded-sm border border-white/80"
-              style={{ backgroundColor: color }}
-            />
-          ))}
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">High</span>
-        </div>
+      <div className="relative">
+        <KenyaCountyMapboxMap
+          accessToken={token}
+          geoJson={enrichedGeoJson}
+          metric={metric}
+          maxValue={maxValue}
+          height={height}
+          onCountySelect={onCountySelect}
+          onCountyHover={onCountyHover}
+        />
+        {legendOverlay && <ChoroplethLegend metric={metric} overlay />}
       </div>
+      {!legendOverlay && <ChoroplethLegend metric={metric} />}
     </div>
   );
 }
+
+export { formatMetricValue, METRIC_LABELS };
