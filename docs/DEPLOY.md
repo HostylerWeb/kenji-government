@@ -25,11 +25,24 @@ cd /var/www
 git clone git@github.com:HostylerWeb/kenji-government.git kenji-government
 cd kenji-government
 cp .env.example .env
-# Edit: DATABASE_URL, REDIS_URL, JWT secrets, NEXT_PUBLIC_API_URL=https://your-domain/api
+# Edit: DATABASE_URL, REDIS_URL, JWT secrets, GOVERNMENT_TAX_RATE, NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
+bash scripts/write-production-web-env.sh   # writes apps/web/.env.local (never localhost)
 npm ci
 npm run build
 npm run db:migrate
 npm run db:seed   # optional for demo data
+```
+
+**Important:** `apps/web/.env.local` is generated on the server by `scripts/write-production-web-env.sh`. Do not copy your local dev `.env.local` to production — it will bake `localhost:4000` into the client bundle.
+
+## 2b. Deploy from local machine
+
+```bash
+# Git-based full deploy (recommended)
+bash scripts/vps-deploy.sh
+
+# Or sync workspace without overwriting server env files
+bash scripts/vps-rsync-deploy.sh
 ```
 
 ## 3. Start with PM2

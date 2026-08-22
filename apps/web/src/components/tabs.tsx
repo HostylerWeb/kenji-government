@@ -43,16 +43,20 @@ export function Tabs({
   onChange,
   className,
   variant = "pills",
+  scrollToTopOnChange = false,
 }: {
   tabs: Tab[];
   active: string;
   onChange: (id: string) => void;
   className?: string;
   variant?: "pills" | "underline";
+  scrollToTopOnChange?: boolean;
 }) {
   function handleChange(id: string) {
     onChange(id);
-    window.scrollTo(0, 0);
+    if (scrollToTopOnChange) {
+      window.scrollTo(0, 0);
+    }
   }
   if (variant === "underline") {
     return (

@@ -489,9 +489,15 @@ export class ReportDataService {
     const year = Number(parameters.year ?? new Date().getFullYear());
     const month = Number(parameters.month ?? new Date().getMonth() + 1);
 
-    const period = await prisma.reporting_periods.findFirst({
+    let period = await prisma.reporting_periods.findFirst({
       where: { year, month },
     });
+
+    if (!period) {
+      period = await prisma.reporting_periods.findFirst({
+        orderBy: [{ year: "desc" }, { month: "desc" }],
+      });
+    }
 
     if (!period) {
       return {

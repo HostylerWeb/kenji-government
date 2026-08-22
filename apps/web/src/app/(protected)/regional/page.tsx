@@ -302,7 +302,7 @@ export default function RegionalPage() {
                   <CardTitle>National county map</CardTitle>
                   <CardDescription>
                     Explore performance across all 47 counties. Switch the metric, hover for quick stats,
-                    or click through to a full county profile.
+                    then click a county and confirm to open its full profile.
                   </CardDescription>
                   <p className="inline-flex items-center gap-2 rounded-md bg-secondary/70 px-3 py-2 text-xs text-muted-foreground">
                     <MousePointerClick className="h-3.5 w-3.5 shrink-0 text-primary" />

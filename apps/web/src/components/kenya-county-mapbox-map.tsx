@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, X } from "lucide-react";
 import Map, {
   AttributionControl,
   Layer,
@@ -37,6 +38,84 @@ type HoverInfo = {
   latitude: number;
 };
 
+function CountyMapPopup({
+  info,
+  metric,
+  pinned = false,
+  onOpen,
+  onDismiss,
+}: {
+  info: HoverInfo;
+  metric: ChoroplethMetric;
+  pinned?: boolean;
+  onOpen?: () => void;
+  onDismiss?: () => void;
+}) {
+  return (
+    <div className="min-w-[200px] space-y-2 p-0.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-foreground">{info.county}</p>
+        {pinned && onDismiss && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss();
+            }}
+            className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {metric === "annual_ggr"
+          ? "Annual GGR"
+          : metric === "sessions"
+            ? "Player sessions"
+            : "Play Safe activations"}
+        :{" "}
+        <span className="font-medium tabular-nums text-foreground">
+          {formatMetricValue(metric, info.value)}
+        </span>
+      </p>
+      {info.change !== null && (
+        <p className="text-xs text-muted-foreground">
+          Session change:{" "}
+          <span
+            className={
+              info.change > 0
+                ? "font-medium text-success"
+                : info.change < 0
+                  ? "font-medium text-danger"
+                  : "font-medium text-foreground"
+            }
+          >
+            {info.change > 0 ? "+" : ""}
+            {info.change}%
+          </span>
+        </p>
+      )}
+      {pinned && onOpen ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          View {info.county} details
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <p className="text-[11px] text-muted-foreground/80">Click county to explore</p>
+      )}
+    </div>
+  );
+}
+
 function hideBasemapLabels(map: MapboxMap) {
   const style = map.getStyle();
   if (!style?.layers) return;
@@ -69,6 +148,7 @@ export function KenyaCountyMapboxMap({
   const mapRef = useRef<MapRef>(null);
   const hoveredFeatureId = useRef<string | number | null>(null);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+  const [pinnedInfo, setPinnedInfo] = useState<HoverInfo | null>(null);
   const [cursor, setCursor] = useState<string>("default");
 
   const fillPaint = useMemo(
@@ -148,7 +228,7 @@ export function KenyaCountyMapboxMap({
       const feature = event.features?.[0];
       if (!map || !feature?.id) {
         clearHoverState();
-        setHoverInfo(null);
+        if (!pinnedInfo) setHoverInfo(null);
         setCursor("default");
         onCountyHover?.(null);
         return;
@@ -166,10 +246,17 @@ export function KenyaCountyMapboxMap({
       setCursor("pointer");
 
       const props = feature.properties as CountyFeatureProperties;
-      onCountyHover?.(props.dbCounty ?? props.shapeName);
+      const dbCounty = props.dbCounty ?? props.shapeName;
+      onCountyHover?.(dbCounty);
+
+      if (pinnedInfo?.dbCounty === dbCounty) {
+        setHoverInfo(null);
+        return;
+      }
+
       setHoverInfo({
         county: props.shapeName,
-        dbCounty: props.dbCounty,
+        dbCounty,
         value: Number(props.metricValue ?? 0),
         change:
           props.sessionsChangePct !== null && props.sessionsChangePct !== undefined
@@ -179,27 +266,52 @@ export function KenyaCountyMapboxMap({
         latitude: event.lngLat.lat,
       });
     },
-    [clearHoverState, onCountyHover],
+    [clearHoverState, onCountyHover, pinnedInfo],
   );
 
   const onMouseLeave = useCallback(() => {
     clearHoverState();
-    setHoverInfo(null);
+    if (!pinnedInfo) setHoverInfo(null);
     setCursor("default");
     onCountyHover?.(null);
-  }, [clearHoverState, onCountyHover]);
+  }, [clearHoverState, onCountyHover, pinnedInfo]);
+
+  const openCountyDetails = useCallback(
+    (info: HoverInfo) => {
+      onCountySelect?.(info.dbCounty);
+      router.push(`/regional/${encodeURIComponent(info.dbCounty)}`);
+    },
+    [onCountySelect, router],
+  );
 
   const onClick = useCallback(
     (event: MapMouseEvent) => {
       const feature = event.features?.[0];
-      if (!feature?.properties) return;
+      if (!feature?.properties) {
+        setPinnedInfo(null);
+        setHoverInfo(null);
+        return;
+      }
 
       const props = feature.properties as CountyFeatureProperties;
       const dbCounty = props.dbCounty ?? props.shapeName;
-      onCountySelect?.(dbCounty);
-      router.push(`/regional/${encodeURIComponent(dbCounty)}`);
+      const nextPinned: HoverInfo = {
+        county: props.shapeName,
+        dbCounty,
+        value: Number(props.metricValue ?? 0),
+        change:
+          props.sessionsChangePct !== null && props.sessionsChangePct !== undefined
+            ? Number(props.sessionsChangePct)
+            : null,
+        longitude: event.lngLat.lng,
+        latitude: event.lngLat.lat,
+      };
+
+      setPinnedInfo(nextPinned);
+      setHoverInfo(null);
+      onCountyHover?.(dbCounty);
     },
-    [onCountySelect, router],
+    [onCountyHover],
   );
 
   return (
@@ -236,49 +348,41 @@ export function KenyaCountyMapboxMap({
           <Layer id="counties-line" type="line" source={SOURCE_ID} paint={linePaint} />
         </Source>
 
-        {hoverInfo && (
+        {pinnedInfo ? (
           <Popup
-            longitude={hoverInfo.longitude}
-            latitude={hoverInfo.latitude}
+            longitude={pinnedInfo.longitude}
+            latitude={pinnedInfo.latitude}
             closeButton={false}
             closeOnClick={false}
             anchor="bottom"
             offset={12}
-            className="county-map-popup"
+            className="county-map-popup county-map-popup--pinned"
           >
-            <div className="min-w-[180px] space-y-1.5 p-0.5">
-              <p className="text-sm font-semibold text-foreground">{hoverInfo.county}</p>
-              <p className="text-xs text-muted-foreground">
-                {metric === "annual_ggr"
-                  ? "Annual GGR"
-                  : metric === "sessions"
-                    ? "Player sessions"
-                    : "Play Safe activations"}
-                :{" "}
-                <span className="font-medium tabular-nums text-foreground">
-                  {formatMetricValue(metric, hoverInfo.value)}
-                </span>
-              </p>
-              {hoverInfo.change !== null && (
-                <p className="text-xs text-muted-foreground">
-                  Session change:{" "}
-                  <span
-                    className={
-                      hoverInfo.change > 0
-                        ? "font-medium text-success"
-                        : hoverInfo.change < 0
-                          ? "font-medium text-danger"
-                          : "font-medium text-foreground"
-                    }
-                  >
-                    {hoverInfo.change > 0 ? "+" : ""}
-                    {hoverInfo.change}%
-                  </span>
-                </p>
-              )}
-              <p className="text-[11px] text-muted-foreground/80">Click for county detail</p>
-            </div>
+            <CountyMapPopup
+              info={pinnedInfo}
+              metric={metric}
+              pinned
+              onOpen={() => openCountyDetails(pinnedInfo)}
+              onDismiss={() => {
+                setPinnedInfo(null);
+                onCountyHover?.(null);
+              }}
+            />
           </Popup>
+        ) : (
+          hoverInfo && (
+            <Popup
+              longitude={hoverInfo.longitude}
+              latitude={hoverInfo.latitude}
+              closeButton={false}
+              closeOnClick={false}
+              anchor="bottom"
+              offset={12}
+              className="county-map-popup"
+            >
+              <CountyMapPopup info={hoverInfo} metric={metric} />
+            </Popup>
+          )
         )}
       </Map>
 

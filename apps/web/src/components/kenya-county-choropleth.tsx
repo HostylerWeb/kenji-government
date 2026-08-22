@@ -46,7 +46,7 @@ function ChoroplethLegend({ metric, overlay }: { metric: ChoroplethMetric; overl
   return (
     <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-xs text-muted-foreground">
-        Shaded by {METRIC_LABELS[metric].toLowerCase()}. Hover for detail — click any county to drill down.
+        Shaded by {METRIC_LABELS[metric].toLowerCase()}. Hover for quick stats — click a county, then confirm to open its profile.
       </p>
       <div className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 shadow-sm">
         {content}

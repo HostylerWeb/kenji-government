@@ -343,7 +343,7 @@ async function main() {
 
   console.log("Seeding reporting periods...");
   const periods = [];
-  for (let m = 1; m <= 6; m++) {
+  for (let m = 1; m <= 12; m++) {
     const year = 2026;
     const label = new Date(year, m - 1, 1).toLocaleString("en-KE", {
       month: "long",
@@ -793,9 +793,9 @@ async function main() {
       parameters_schema: {
         fields: [
           { name: "year", type: "number", label: "Year", default: 2026 },
-          { name: "month", type: "number", label: "Month", min: 1, max: 12, default: 7 },
+          { name: "month", type: "number", label: "Month", min: 1, max: 12, default: 6 },
         ],
-        defaults: { year: 2026, month: 7 },
+        defaults: { year: 2026, month: 6 },
       },
       is_scheduled: true,
       schedule_recipients: ["supervisor@gra.go.ke"],
