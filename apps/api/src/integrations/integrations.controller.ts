@@ -3,6 +3,7 @@ import { ApiTags } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import { IntegrationsService } from "./integrations.service";
 import { SubmitOperatorApplicationDto } from "./dto/operator-application.dto";
+import { TeardownPlatformOperatorDto } from "./dto/teardown-platform-operator.dto";
 import { PlatformIntegrationGuard } from "./guards/platform-integration.guard";
 
 @ApiTags("integrations")
@@ -22,5 +23,13 @@ export class IntegrationsController {
   @Get("operator-applications/:id/status")
   applicationStatus(@Param("id") id: string) {
     return this.integrations.getApplicationStatus(id);
+  }
+
+  @Post("platform-operators/teardown")
+  teardownPlatformOperator(
+    @Body() dto: TeardownPlatformOperatorDto,
+    @Req() _req: FastifyRequest,
+  ) {
+    return this.integrations.teardownPlatformOperator(dto);
   }
 }

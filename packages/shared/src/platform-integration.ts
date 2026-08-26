@@ -56,3 +56,8 @@ export type GraApplicationRejectedPayload = {
   status: "rejected";
   rejection_reason: string;
 };
+
+export type GraPlatformOperatorTeardownPayload = {
+  platform_operator_id: string;
+  gra_registry_id?: string;
+};

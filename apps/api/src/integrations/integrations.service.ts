@@ -13,6 +13,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import type { SubmitOperatorApplicationDto } from "./dto/operator-application.dto";
+import type { TeardownPlatformOperatorDto } from "./dto/teardown-platform-operator.dto";
 import { UsersService } from "../users/users.service";
 
 @Injectable()
@@ -265,6 +266,58 @@ export class IntegrationsService {
     });
 
     return this.getApplication(id);
+  }
+
+  async teardownPlatformOperator(dto: TeardownPlatformOperatorDto) {
+    const platformOperatorId = dto.platform_operator_id.trim();
+    const graRegistryId = dto.gra_registry_id?.trim().toLowerCase();
+
+    const application =
+      await this.prisma.client.operator_applications.findUnique({
+        where: { platform_operator_id: platformOperatorId },
+      });
+
+    const externalIds = new Set<string>();
+    if (graRegistryId) externalIds.add(graRegistryId);
+    if (application?.proposed_external_id) {
+      externalIds.add(application.proposed_external_id.toLowerCase());
+    }
+
+    const operatorIds = new Set<string>();
+    if (application?.created_operator_id) {
+      operatorIds.add(application.created_operator_id);
+    }
+
+    for (const externalId of externalIds) {
+      const operator = await this.prisma.client.operators.findUnique({
+        where: { external_id: externalId },
+        select: { id: true },
+      });
+      if (operator) operatorIds.add(operator.id);
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      if (application) {
+        await tx.operator_applications.delete({ where: { id: application.id } });
+      }
+
+      if (operatorIds.size > 0) {
+        await tx.operators.deleteMany({
+          where: { id: { in: [...operatorIds] } },
+        });
+      } else if (externalIds.size > 0) {
+        await tx.operators.deleteMany({
+          where: { external_id: { in: [...externalIds] } },
+        });
+      }
+    });
+
+    return {
+      ok: true,
+      platform_operator_id: platformOperatorId,
+      removed_application: Boolean(application),
+      removed_operators: operatorIds.size,
+    };
   }
 
   private applicationData(dto: SubmitOperatorApplicationDto) {
