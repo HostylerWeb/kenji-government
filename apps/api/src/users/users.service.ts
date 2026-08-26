@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
+import { Prisma } from "@prisma/client";
 import {
   ADMIN_ASSIGNABLE_ROLES,
   SUPER_ADMIN_ASSIGNABLE_ROLES,
@@ -176,8 +177,9 @@ export class UsersService {
     return operator.operator_sites;
   }
 
-  async generateCredential(siteId: string) {
-    const site = await this.prisma.client.operator_sites.findUnique({
+  async generateCredential(siteId: string, tx?: Prisma.TransactionClient) {
+    const db = tx ?? this.prisma.client;
+    const site = await db.operator_sites.findUnique({
       where: { id: siteId },
     });
     if (!site) throw new NotFoundException("Operator site not found");
@@ -186,9 +188,11 @@ export class UsersService {
     const prefix = rawKey.slice(0, 12);
     const api_key_hash = createHash("sha256").update(rawKey).digest("hex");
     const hmac_secret = randomBytes(32).toString("hex");
-    const hmac_secret_hash = createHash("sha256").update(hmac_secret).digest("hex");
+    const hmac_secret_hash = createHash("sha256")
+      .update(hmac_secret)
+      .digest("hex");
 
-    const credential = await this.prisma.client.api_credentials.create({
+    const credential = await db.api_credentials.create({
       data: {
         operator_site_id: siteId,
         api_key_hash,
@@ -206,6 +210,33 @@ export class UsersService {
       hmac_secret,
       message: "Store these credentials securely. They will not be shown again.",
     };
+  }
+
+  async createSite(
+    externalId: string,
+    dto: { domain: string; site_name?: string; is_primary?: boolean },
+  ) {
+    const operator = await this.prisma.client.operators.findUnique({
+      where: { external_id: externalId },
+    });
+    if (!operator) throw new NotFoundException("Operator not found");
+
+    if (dto.is_primary) {
+      await this.prisma.client.operator_sites.updateMany({
+        where: { operator_id: operator.id },
+        data: { is_primary: false },
+      });
+    }
+
+    return this.prisma.client.operator_sites.create({
+      data: {
+        operator_id: operator.id,
+        domain: dto.domain.trim().toLowerCase(),
+        site_name: dto.site_name?.trim() || dto.domain.trim(),
+        is_primary: dto.is_primary ?? false,
+        status: "active",
+      },
+    });
   }
 
   async revokeCredential(credentialId: string) {

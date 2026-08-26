@@ -1,27 +1,41 @@
 #!/usr/bin/env bash
 # Deploy kenji-government to VPS — run from local machine with SSH access.
+# Usage: SSHPASS='...' sshpass -e bash scripts/vps-deploy.sh
 set -euo pipefail
 
 VPS_HOST="${VPS_HOST:-root@152.239.119.54}"
-MAIN_DOMAIN="${MAIN_DOMAIN:-srv1781529.hstgr.cloud}"
+CONSOLE_DOMAIN="${CONSOLE_DOMAIN:-console.force42.com}"
+INGEST_DOMAIN="${INGEST_DOMAIN:-ingest.force42.com}"
 DEPLOY_PATH="/var/www/kenji-government"
 REPO="https://github.com/HostylerWeb/kenji-government.git"
 
-echo "=== GRA VPS deploy (${MAIN_DOMAIN}) ==="
+run_ssh() {
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+    sshpass -e ssh -o StrictHostKeyChecking=no "$@"
+  else
+    ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no "$@"
+  fi
+}
 
-ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no \
-  "$VPS_HOST" env MAIN_DOMAIN="$MAIN_DOMAIN" DEPLOY_PATH="$DEPLOY_PATH" REPO="$REPO" bash -s <<'REMOTE'
+echo "=== GRA VPS deploy (console=${CONSOLE_DOMAIN}, ingest=${INGEST_DOMAIN}) ==="
+
+run_ssh "$VPS_HOST" env \
+  CONSOLE_DOMAIN="$CONSOLE_DOMAIN" \
+  INGEST_DOMAIN="$INGEST_DOMAIN" \
+  DEPLOY_PATH="$DEPLOY_PATH" \
+  REPO="$REPO" \
+  bash -s <<'REMOTE'
 set -euo pipefail
 
 OLD_PATH="/var/www/government"
-API_URL="https://${MAIN_DOMAIN}/api"
+API_URL="https://${CONSOLE_DOMAIN}/api"
 
 write_web_env() {
-  bash scripts/write-production-web-env.sh
+  CONSOLE_DOMAIN="$CONSOLE_DOMAIN" bash scripts/write-production-web-env.sh
 }
 
 verify_web_build() {
-  bash scripts/verify-production-web-build.sh
+  CONSOLE_DOMAIN="$CONSOLE_DOMAIN" bash scripts/verify-production-web-build.sh
 }
 
 # Remove legacy static POC site
@@ -79,6 +93,17 @@ grep -q '^GOVERNMENT_TAX_RATE=' .env || echo 'GOVERNMENT_TAX_RATE=0.3' >> .env
 sed -i 's|^GOVERNMENT_TAX_RATE=.*|GOVERNMENT_TAX_RATE=0.3|' .env
 sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=\"${API_URL}\"|" .env
 
+grep -q '^PLATFORM_GRA_INTEGRATION_SECRET=' .env || \
+  echo 'PLATFORM_GRA_INTEGRATION_SECRET="change-me-platform-gra-integration-secret"' >> .env
+
+KENJI_ENV="/var/www/Kenji-raffle/.env"
+if [[ -f "$KENJI_ENV" ]]; then
+  KENJI_SECRET="$(grep '^PLATFORM_GRA_INTEGRATION_SECRET=' "$KENJI_ENV" | cut -d= -f2- | tr -d '"')"
+  if [[ -n "$KENJI_SECRET" && "$KENJI_SECRET" != "change-me-platform-gra-integration-secret" ]]; then
+    sed -i "s|^PLATFORM_GRA_INTEGRATION_SECRET=.*|PLATFORM_GRA_INTEGRATION_SECRET=\"${KENJI_SECRET}\"|" .env
+  fi
+fi
+
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
@@ -112,16 +137,18 @@ pm2 delete gra-api gra-ingest gra-worker gra-web 2>/dev/null || true
 pm2 start deploy/ecosystem.config.cjs
 pm2 save
 
-# Apache proxy config
+# Apache proxy config (Force42 + Cloudflare origin cert)
 if [ -f deploy/apache/console.conf.template ]; then
-  cp deploy/apache/console.conf.template /etc/apache2/sites-available/gra-console.conf
+  cp deploy/apache/console.conf.template /etc/apache2/sites-available/gra-force42-console.conf
+  cp deploy/apache/ingest.conf.template /etc/apache2/sites-available/gra-force42-ingest.conf
   a2enmod proxy proxy_http ssl headers rewrite 2>/dev/null || true
-  a2dissite byanydream.conf byanydream-le-ssl.conf compliance.conf compliance-le-ssl.conf 000-default.conf 2>/dev/null || true
-  a2ensite gra-console.conf
+  a2dissite byanydream.conf byanydream-le-ssl.conf compliance.conf compliance-le-ssl.conf gra-console.conf 000-default.conf 2>/dev/null || true
+  a2ensite gra-force42-console.conf gra-force42-ingest.conf
   systemctl reload apache2
 fi
 
 echo "Deploy complete."
 REMOTE
 
-echo "Done. Test: https://${MAIN_DOMAIN}/login"
+echo "Done. Test: https://${CONSOLE_DOMAIN}/login"
+echo "Ingest: https://${INGEST_DOMAIN}/health"

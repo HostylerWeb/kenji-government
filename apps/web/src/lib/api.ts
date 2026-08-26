@@ -1398,3 +1398,68 @@ export async function initiateWithdrawal(token: string, businessDate?: string) {
     body: JSON.stringify({ business_date: businessDate }),
   });
 }
+
+export type OperatorApplicationItem = {
+  id: string;
+  platform_operator_id: string;
+  proposed_external_id: string;
+  legal_name: string;
+  trading_name: string;
+  staging_hostname: string;
+  status: string;
+  rejection_reason?: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: { full_name: string; email: string } | null;
+  created_operator?: { external_id: string } | null;
+};
+
+export type OperatorApplicationDetail = OperatorApplicationItem & {
+  registration_number?: string | null;
+  kra_pin?: string | null;
+  beneficial_owner?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  county?: string | null;
+  region?: string | null;
+  website?: string | null;
+  licence_number?: string | null;
+  callback_url?: string;
+  created_operator?: {
+    id: string;
+    external_id: string;
+    operator_sites?: Array<{ id: string; domain: string }>;
+  } | null;
+};
+
+export async function getOperatorApplications(token: string, status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiRequest<OperatorApplicationItem[]>(`/operator-applications${query}`, {
+    token,
+  });
+}
+
+export async function getOperatorApplication(token: string, id: string) {
+  return apiRequest<OperatorApplicationDetail>(`/operator-applications/${id}`, {
+    token,
+  });
+}
+
+export async function approveOperatorApplication(token: string, id: string) {
+  return apiRequest<OperatorApplicationDetail>(`/operator-applications/${id}/approve`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function rejectOperatorApplication(
+  token: string,
+  id: string,
+  rejectionReason: string,
+) {
+  return apiRequest<OperatorApplicationDetail>(`/operator-applications/${id}/reject`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ rejection_reason: rejectionReason }),
+  });
+}

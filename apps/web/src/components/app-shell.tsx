@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   User,
   ChevronDown,
+  UserPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AuthUser } from "@kenji-government/shared";
@@ -72,6 +73,7 @@ const navGroups = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/operators", label: "Operators", icon: Building2 },
+      { href: "/applications", label: "Applications", icon: UserPlus },
       { href: "/submissions", label: "Submissions", icon: FileText },
       { href: "/compliance", label: "Compliance", icon: Scale },
       { href: "/enforcement", label: "Enforcement", icon: Shield },

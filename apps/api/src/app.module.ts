@@ -18,6 +18,7 @@ import { SettingsModule } from "./settings/settings.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { RegionalModule } from "./regional/regional.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { IntegrationsModule } from "./integrations/integrations.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     SettingsModule,
     PaymentsModule,
     NotificationsModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}

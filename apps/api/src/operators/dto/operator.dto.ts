@@ -36,6 +36,11 @@ export class CreateOperatorDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  kra_pin?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsEmail()
   email?: string;
 
@@ -95,6 +100,11 @@ export class UpdateOperatorDto {
   @IsOptional()
   @IsString()
   beneficial_owner?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  kra_pin?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

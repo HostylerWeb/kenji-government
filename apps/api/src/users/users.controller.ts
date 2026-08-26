@@ -11,6 +11,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "@kenji-government/shared";
 import { UsersService } from "./users.service";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
+import { CreateOperatorSiteDto } from "./dto/operator-site.dto";
 import { JwtAuthGuard, RolesGuard } from "../auth/guards/auth.guards";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -56,6 +57,15 @@ export class OperatorSitesController {
   @Roles("admin", "supervisor")
   listSites(@Param("externalId") externalId: string) {
     return this.usersService.listSites(externalId);
+  }
+
+  @Post("operators/:externalId/sites")
+  @Roles("admin")
+  createSite(
+    @Param("externalId") externalId: string,
+    @Body() dto: CreateOperatorSiteDto,
+  ) {
+    return this.usersService.createSite(externalId, dto);
   }
 
   @Post("operator-sites/:siteId/credentials")

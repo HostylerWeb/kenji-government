@@ -188,6 +188,7 @@ model users {
   system_settings       system_settings[]
   tax_withdrawal_batches tax_withdrawal_batches[]
   reviewed_aml_alerts   aml_alerts[]
+  reviewed_applications operator_applications[] @relation("ApplicationReviewer")
   trusted_devices       user_trusted_devices[]
 }
 
@@ -229,6 +230,7 @@ model operators {
   trading_name         String
   registration_number  String?
   beneficial_owner     String?
+  kra_pin              String?
   email                String?
   phone                String?
   county               String?
@@ -254,6 +256,46 @@ model operators {
   live_activity_feed         live_activity_feed[]
   payment_transactions       payment_transactions[]
   aml_alerts                 aml_alerts[]
+  operator_applications      operator_applications[]
+}
+
+enum operator_application_status {
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+model operator_applications {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  platform_operator_id String                      @unique
+  proposed_external_id String
+  legal_name           String
+  trading_name         String
+  registration_number  String?
+  kra_pin              String?
+  beneficial_owner     String?
+  email                String?
+  phone                String?
+  county               String?
+  region               String?
+  website              String?
+  licence_number       String?
+  staging_hostname     String
+  callback_url         String
+  status               operator_application_status @default(submitted)
+  rejection_reason     String?
+  reviewed_by_id       String?                     @db.Uuid
+  reviewed_at          DateTime?                   @db.Timestamptz(6)
+  created_operator_id  String?                     @db.Uuid
+  created_at           DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                    @updatedAt @db.Timestamptz(6)
+
+  reviewed_by     users?     @relation("ApplicationReviewer", fields: [reviewed_by_id], references: [id], onDelete: SetNull)
+  created_operator operators? @relation(fields: [created_operator_id], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([created_at])
 }
 
 model operator_sites {

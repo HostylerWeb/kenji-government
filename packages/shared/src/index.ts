@@ -10,3 +10,4 @@ export * from "./audit";
 export * from "./player-safety";
 export * from "./system-settings";
 export * from "./payments";
+export * from "./platform-integration";
