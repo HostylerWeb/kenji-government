@@ -1,0 +1,100 @@
+Force42.com — VPS domain structure
+==================================
+VPS IP:     152.239.119.54
+DNS:        Cloudflare (proxied, Full strict)
+Origin SSL: Cloudflare Origin Certificate (force42.com + *.force42.com)
+Web server: Apache 2.4 (HTTPS on :443)
+
+Each hostname below maps to a Kenji platform service. Operator admin lives
+at /admin on tenant hostnames — not a separate subdomain.
+
+
+Apex & www
+----------
+force42.com
+  Marketing / landing page (optional). Static stub for now.
+  Later: redirect to platform or public site homepage.
+
+www.force42.com
+  CNAME → force42.com. Static stub for now.
+
+
+GRA (kenji-government) — LIVE
+------------------------------
+Deploy path: /var/www/kenji-government
+PM2: gra-api, gra-ingest, gra-worker, gra-web
+
+console.force42.com
+  GRA staff console (Next.js :3000). LIVE
+  Staff login, operators registry, compliance, payments oversight, reports.
+  API proxied at /api/ → NestJS staff API (:4000).
+  Login: admin@gra.go.ke (change password after first login)
+
+ingest.force42.com
+  GRA ingest API only (NestJS :4001). LIVE
+  Operators push ticket/safety events: POST /v1/events/*
+  Payment gateway pushes ledger:   POST /v1/gateway/notify
+  Monthly returns:                 POST /v1/returns/monthly
+
+
+Raffle platform (Kenji-raffle) — LIVE
+--------------------------------------
+Deploy path: /var/www/Kenji-raffle
+PM2: raffle-api, raffle-worker, raffle-platform, raffle-web
+Docker: postgres :5437, redis :6383 (shares MinIO :9000 with GRA)
+
+platform.force42.com
+  Platform super-admin console (:3003). LIVE
+  Create operators, GRA keys, provisioning, cross-tenant health & metrics.
+  Platform staff only — not operator customers.
+  Login: admin@platform.local (change password after first login)
+
+api.force42.com
+  Raffle platform API (:4002). LIVE
+  Hostname → tenant resolution, cart, checkout, player auth, operator admin API.
+  Health: https://api.force42.com/health
+
+*.force42.com
+  Wildcard tenant sites (web app :3002). LIVE
+  Examples: demo.force42.com, safarijackpot.force42.com
+  Public player site + operator admin at /admin on the same hostname.
+  (Tenant must be created in platform console first.)
+
+customers.force42.com
+  CNAME target for operator custom domains. LIVE (routes to tenant web :3002)
+  Operators point www.theirbrand.co.ke → customers.force42.com in Cloudflare.
+  Same tenant web app (:3002); hostname routing picks the operator.
+
+
+Payment gateway (kenji-gateway) — NOT DEPLOYED YET
+---------------------------------------------------
+pay.force42.com
+  Payment gateway (:4003). STUB PAGE ONLY for now.
+  Planned: checkout redirect from raffle sites. Card/M-Pesa processing, tax split,
+  escrow, callback to raffle, notify GRA at ingest.force42.com.
+
+
+Traffic flow (summary)
+----------------------
+Players     →  {slug}.force42.com  or  operator custom domain
+Checkout    →  pay.force42.com
+Raffle API  →  api.force42.com
+GRA staff   →  console.force42.com
+GRA ingest  →  ingest.force42.com  (from raffle worker + payment gateway)
+Platform ops → platform.force42.com
+
+
+Apache / deploy paths (reference)
+---------------------------------
+SSL certs:         /etc/ssl/cloudflare/force42.pem, force42.key
+Apache vhosts:
+  gra-force42-console.conf, gra-force42-ingest.conf  → GRA proxies
+  raffle-force42.conf                                → platform, api, customers, *
+  force42-test-ssl.conf, 00-pay-force42.conf         → apex, www, pay stub
+SSH:               see ssh.txt
+
+Status summary (2026-08-24)
+---------------------------
+LIVE:     console, ingest, platform, api, customers, *.force42.com (tenant web)
+STUB:     force42.com, www.force42.com, pay.force42.com
+NOT YET:  kenji-gateway on pay.force42.com

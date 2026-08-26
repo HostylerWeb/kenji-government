@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
-import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Download,

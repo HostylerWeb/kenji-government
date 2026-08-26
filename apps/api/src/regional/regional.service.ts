@@ -598,7 +598,7 @@ export class RegionalService {
     }>,
     from: Date,
     to: Date,
-    rangeLabel: string,
+    _rangeLabel: string,
   ) {
     const now = new Date();
     const { priorSince, priorTo } = this.getComparisonPeriod(from, to);
