@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MAIN_DOMAIN="${MAIN_DOMAIN:-srv1781529.hstgr.cloud}"
+CONSOLE_DOMAIN="${CONSOLE_DOMAIN:-console.force42.com}"
 CHUNKS_DIR="$ROOT_DIR/apps/web/.next/static/chunks"
 
 if [[ ! -d "$CHUNKS_DIR" ]]; then
@@ -16,8 +16,8 @@ if grep -rq 'localhost:4000' "$CHUNKS_DIR" 2>/dev/null; then
   exit 1
 fi
 
-if ! grep -rq "$MAIN_DOMAIN" "$CHUNKS_DIR" 2>/dev/null; then
-  echo "verify-production-web-build: production host ${MAIN_DOMAIN} not found in client bundles" >&2
+if ! grep -rq "$CONSOLE_DOMAIN" "$CHUNKS_DIR" 2>/dev/null; then
+  echo "verify-production-web-build: production host ${CONSOLE_DOMAIN} not found in client bundles" >&2
   exit 1
 fi
 

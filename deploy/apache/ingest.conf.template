@@ -1,0 +1,17 @@
+# GRA ingest API — ingest.force42.com (Apache + Cloudflare origin cert)
+<VirtualHost *:443>
+    ServerName ingest.force42.com
+
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/cloudflare/force42.pem
+    SSLCertificateKeyFile /etc/ssl/cloudflare/force42.key
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+
+    ProxyPass / http://127.0.0.1:4001/
+    ProxyPassReverse / http://127.0.0.1:4001/
+
+    ErrorLog ${APACHE_LOG_DIR}/gra-force42-ingest-error.log
+    CustomLog ${APACHE_LOG_DIR}/gra-force42-ingest-access.log combined
+</VirtualHost>

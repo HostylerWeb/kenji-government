@@ -11,7 +11,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module";
 
-loadEnv({ path: resolve(__dirname, "../../../.env") });
+loadEnv({ path: resolve(__dirname, "../../../.env"), override: true });
 
 declare module "fastify" {
   interface FastifyRequest {

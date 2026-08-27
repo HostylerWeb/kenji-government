@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MAIN_DOMAIN="${MAIN_DOMAIN:-srv1781529.hstgr.cloud}"
-API_URL="https://${MAIN_DOMAIN}/api"
+CONSOLE_DOMAIN="${CONSOLE_DOMAIN:-console.force42.com}"
+API_URL="https://${CONSOLE_DOMAIN}/api"
 
 if [[ "${FORCE_PRODUCTION_WEB_ENV:-}" != "1" ]]; then
   case "$(hostname -s 2>/dev/null || hostname)" in

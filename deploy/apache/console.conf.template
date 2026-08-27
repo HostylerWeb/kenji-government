@@ -1,29 +1,21 @@
-# GRA staff console — main domain (Apache + Let's Encrypt)
+# GRA staff console — console.force42.com (Apache + Cloudflare origin cert)
 <VirtualHost *:443>
-    ServerName srv1781529.hstgr.cloud
+    ServerName console.force42.com
 
     SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/srv1781529.hstgr.cloud/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/srv1781529.hstgr.cloud/privkey.pem
-    Include /etc/letsencrypt/options-ssl-apache.conf
+    SSLCertificateFile /etc/ssl/cloudflare/force42.pem
+    SSLCertificateKeyFile /etc/ssl/cloudflare/force42.key
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Host "console.force42.com"
 
-    # Staff API
     ProxyPass /api/ http://127.0.0.1:4000/
     ProxyPassReverse /api/ http://127.0.0.1:4000/
 
-    # Next.js web app
     ProxyPass / http://127.0.0.1:3000/
     ProxyPassReverse / http://127.0.0.1:3000/
 
-    ErrorLog ${APACHE_LOG_DIR}/gra-console-error.log
-    CustomLog ${APACHE_LOG_DIR}/gra-console-access.log combined
-</VirtualHost>
-
-# Redirect HTTP to HTTPS on main domain
-<VirtualHost *:80>
-    ServerName srv1781529.hstgr.cloud
-    Redirect permanent / https://srv1781529.hstgr.cloud/
+    ErrorLog ${APACHE_LOG_DIR}/gra-force42-console-error.log
+    CustomLog ${APACHE_LOG_DIR}/gra-force42-console-access.log combined
 </VirtualHost>

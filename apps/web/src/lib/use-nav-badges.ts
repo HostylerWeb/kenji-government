@@ -5,6 +5,7 @@ import { getStoredAuth } from "@/lib/auth";
 import { getNavBadges, type NavBadges } from "@/lib/api";
 
 const EMPTY_BADGES: NavBadges = {
+  applications: 0,
   submissions: 0,
   compliance: 0,
   enforcement: 0,

@@ -10,7 +10,7 @@ module.exports = {
       script: "dist/main.js",
       instances: 1,
       exec_mode: "fork",
-      env: { NODE_ENV: "production" },
+      env: { NODE_ENV: "production", API_PORT: "4000" },
     },
     {
       name: "gra-ingest",
@@ -18,7 +18,7 @@ module.exports = {
       script: "dist/ingest-main.js",
       instances: 1,
       exec_mode: "fork",
-      env: { NODE_ENV: "production" },
+      env: { NODE_ENV: "production", INGEST_PORT: "4001" },
     },
     {
       name: "gra-worker",

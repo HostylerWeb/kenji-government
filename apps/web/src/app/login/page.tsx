@@ -71,7 +71,11 @@ export default function LoginPage() {
       }
       finishLogin(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Sign-in failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -94,7 +98,11 @@ export default function LoginPage() {
       }
       finishLogin(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid code");
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Invalid code. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -108,7 +116,11 @@ export default function LoginPage() {
       const response = await verifyMfaRequest(challengeToken, otpCode);
       finishLogin(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid code");
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Invalid code. Please try again.",
+      );
     } finally {
       setLoading(false);
     }

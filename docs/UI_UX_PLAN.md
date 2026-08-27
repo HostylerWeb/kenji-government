@@ -6,7 +6,7 @@ Last updated: August 2026
 
 This document defines how we design, build, and validate the government dashboard UI. It complements `PROJECT_PLAN.md` (features/phases) with visual language, layout rules, component standards, and delivery steps.
 
-**Reference prototype:** `/out/` (static Next.js export — stakeholders approved the concept and layout; we evolve it, not replace it).
+**Reference prototype:** `/out/` (historical static export — stakeholders approved the concept; the live app is at `https://console.force42.com`).
 
 ---
 

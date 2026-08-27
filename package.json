@@ -20,6 +20,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
     "test": "npm run test -w @kenji-government/shared",
+    "audit": "npm audit --audit-level=moderate",
+    "audit:fix": "npm audit fix",
     "db:generate": "npm run generate -w @kenji-government/database",
     "db:migrate": "npm run migrate -w @kenji-government/database",
     "db:seed": "npm run seed -w @kenji-government/database",
@@ -27,6 +29,18 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.0",
+    "nodemailer": "^9.0.5",
+    "deepmerge-ts": "^8.0.0",
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.0"
+    },
+    "next": {
+      "postcss": "^8.5.23"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

@@ -10,7 +10,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import multipart from "@fastify/multipart";
 import { IngestAppModule } from "./ingest-app.module";
 
-loadEnv({ path: resolve(__dirname, "../../../.env") });
+loadEnv({ path: resolve(__dirname, "../../../.env"), override: true });
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(

@@ -30,16 +30,16 @@ The portal ingests data from **every licensed operator dashboard** (first pilot 
 
 | Item | Status |
 |------|--------|
-| UI prototype | Done — static Next.js export in `out/` (mock data, **BCLB branding — must change to GRA**) |
+| UI | Live Next.js staff console at `https://console.force42.com` (evolved from `/out/` prototype) |
 | Stakeholder review | Positive — UI/concept approved; tweaks listed in §2 |
-| Backend | Not built |
-| Database | Not built |
-| Operator ingest API | Not built |
-| Operator real-time ingest link | Built (pilot) |
-| Payment gateway (separate repo) | Not in this project — see `docs/PAYMENT_GATEWAY_PROJECT.md` |
-| Production VPS | `https://srv1781529.hstgr.cloud` (main domain) |
+| Backend | **Built and deployed** — NestJS staff API (:4000) + ingest API (:4001) |
+| Database | PostgreSQL 16 (Docker on VPS `:5436`; local Compose) |
+| Operator ingest API | **Live** at `https://ingest.force42.com` |
+| Operator real-time ingest link | Built (pilot + Kenji-raffle worker relay) |
+| Payment gateway (separate repo) | Not deployed on VPS yet — see `docs/PAYMENT_GATEWAY_PROJECT.md` |
+| Production VPS | `https://console.force42.com` (staff), `https://ingest.force42.com` (ingest) |
 
-The `out/` folder is a **design reference**. The real application will be a full-stack rebuild with live data.
+The `out/` folder is a **historical design reference** from the original static prototype. Production runs the full monorepo under `/var/www/kenji-government`.
 
 ---
 
@@ -184,8 +184,10 @@ Full integration spec: `docs/PAYMENT_GATEWAY_PROJECT.md`
 ### Two HTTP surfaces (same codebase, different hosts)
 
 ```
-Staff API + Console     →  console.kenji-government.local  (or compliance.*)
-Operator Ingest API     →  ingest.kenji-government.local
+Staff API + Console     →  Local: http://localhost:3000 (+ staff API :4000)
+                            Production: https://console.force42.com (+ /api → :4000)
+Operator Ingest API     →  Local: http://localhost:4001
+                            Production: https://ingest.force42.com
 ```
 
 Never mix operator ingest traffic with the privileged staff application process.
@@ -203,7 +205,7 @@ Never mix operator ingest traffic with the privileged staff application process.
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Reverse proxy | **Nginx** or **Caddy** | TLS termination, separate ingest vs console routes |
+| Reverse proxy | **Apache 2.4** on VPS (Cloudflare origin cert); **Nginx** templates in `deploy/nginx/` are reference only | TLS termination, separate ingest vs console routes |
 | Process manager | **PM2** or **Docker Compose** | Run API, worker, Next.js |
 | CI/CD | **GitHub Actions** | Build, test, deploy to VPS |
 | Local dev | **Docker Compose** | Postgres, Redis, MinIO, all services |
@@ -214,7 +216,6 @@ Never mix operator ingest traffic with the privileged staff application process.
 - **MongoDB** — money and compliance need relational integrity
 - **Next.js as ingest backend** — security boundary separation
 - **Kafka / microservices** — overkill for tens of operators; Postgres + queue is enough
-- **Apache for app runtime** — use Node behind Nginx; Apache only if legacy static fallback needed
 
 ---
 
@@ -222,72 +223,59 @@ Never mix operator ingest traffic with the privileged staff application process.
 
 ### Server details
 
-See `ssh.txt` in project root.
+See `ssh.txt` and `vps-domain-structure.txt` in the project root.
 
 | Field | Value |
 |-------|-------|
 | Host | `152.239.119.54` |
 | User | `root` |
-| Project path | `/var/www/government` (migrate to `/var/www/kenji-government` when full stack is ready) |
-| Current URL | `https://srv1781529.hstgr.cloud` |
-| Planned URLs | `console.*` (staff), `ingest.*` (operator API) |
+| Project path | `/var/www/kenji-government` |
+| Staff URL | `https://console.force42.com` |
+| Ingest URL | `https://ingest.force42.com` |
+| PM2 processes | `gra-api`, `gra-ingest`, `gra-worker`, `gra-web` |
+| Deploy script | `SSHPASS='…' sshpass -e bash scripts/vps-deploy.sh` |
 
-### Software to install on VPS
+**Obsolete (do not use):** `/var/www/government`, `compliance.srv1781529.hstgr.cloud`, `compliance.conf`.
 
-```bash
-# System
-apt update && apt upgrade -y
-apt install -y curl git build-essential ufw fail2ban
+### Software on VPS (current)
 
-# Node.js 22 (via NodeSource or nvm)
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-apt install -y nodejs
+- **Node.js 22** + **PM2** — API, ingest, worker, Next.js web
+- **Docker Compose** — Postgres `:5436`, Redis `:6382`, MinIO `:9000-9001`
+- **Apache 2.4** — reverse proxy to Node; SSL via Cloudflare origin cert at `/etc/ssl/cloudflare/force42.pem`
 
-# PostgreSQL 16
-apt install -y postgresql postgresql-contrib
+Full bootstrap steps: `docs/DEPLOY.md`.
 
-# Redis
-apt install -y redis-server
+### Apache virtual hosts (production)
 
-# Nginx (replace or complement Apache for Node apps)
-apt install -y nginx
+Templates: `deploy/apache/console.conf.template`, `deploy/apache/ingest.conf.template`  
+Installed as: `gra-force42-console.conf`, `gra-force42-ingest.conf`
 
-# PM2
-npm install -g pm2
-
-# Optional: Docker + Docker Compose (alternative deployment)
-apt install -y docker.io docker-compose-plugin
+```
+console.force42.com  →  :3000 (web), /api → :4000 (staff API)
+ingest.force42.com   →  :4001 (ingest API only)
 ```
 
-### PostgreSQL on VPS
-
-```sql
-CREATE USER kenji_government WITH PASSWORD '<strong-password>';
-CREATE DATABASE kenji_government OWNER kenji_government;
-GRANT ALL PRIVILEGES ON DATABASE kenji_government TO kenji_government;
-```
-
-### Nginx virtual hosts (planned)
+Legacy Nginx examples (reference only):
 
 ```nginx
 # Staff console
 server {
     listen 443 ssl;
-    server_name srv1781529.hstgr.cloud;
+    server_name console.force42.com;
     location / {
-        proxy_pass http://127.0.0.1:3000;  # Next.js
+        proxy_pass http://127.0.0.1:3000;
     }
     location /api/ {
-        proxy_pass http://127.0.0.1:4000;  # NestJS staff API
+        proxy_pass http://127.0.0.1:4000;
     }
 }
 
-# Operator ingest (separate subdomain)
+# Operator ingest
 server {
     listen 443 ssl;
-    server_name ingest.srv1781529.hstgr.cloud;
+    server_name ingest.force42.com;
     location / {
-        proxy_pass http://127.0.0.1:4001;  # NestJS ingest API only
+        proxy_pass http://127.0.0.1:4001;
     }
 }
 ```
@@ -296,22 +284,23 @@ server {
 
 ```bash
 ufw allow OpenSSH
-ufw allow 'Nginx Full'
+ufw allow 'Apache Full'
 ufw enable
 ```
 
 ### SSL
 
-Continue using **Let's Encrypt** (certbot) for production domains.
+Production uses **Cloudflare** (proxied, Full strict) with an **origin certificate** on the VPS. Do not use Let's Encrypt for `force42.com` on the origin when Cloudflare terminates public TLS.
 
 ### Local development
 
 | Item | Value |
 |------|-------|
 | Workspace | `/var/www/kenji-government` |
-| Local URL | `http://kenji-government.local` |
-| `/etc/hosts` | `127.0.0.1 kenji-government.local` |
-| Docker Compose | Postgres `:5432`, Redis `:6379`, MinIO `:9000`, API `:4000`, Ingest `:4001`, Web `:3000` |
+| Staff web | `http://localhost:3000` |
+| Staff API | `http://localhost:4000` |
+| Ingest API | `http://localhost:4001` |
+| Docker Compose | Postgres `:5436`, Redis `:6382`, MinIO `:9000-9001` |
 
 ---
 
@@ -1317,12 +1306,12 @@ Phase 9 (pilot & scale)
 
 ## 12. References
 
-- UI prototype: `/out/` (static Next.js export — **rebrand to GRA**)
+- UI prototype reference: `/out/` (historical static export — production is live at `console.force42.com`)
 - **UI/UX plan:** `docs/UI_UX_PLAN.md`
 - Similar operator model: `/var/www/compgo` (raffle/competition platform)
 - Operator integration kit: `integrations/operator/` (pilot VPS path: `/var/www/byanydream`)
-- VPS: `https://srv1781529.hstgr.cloud`
+- VPS staff console: `https://console.force42.com` · ingest: `https://ingest.force42.com`
+- Domain map: `vps-domain-structure.txt` · SSH: `ssh.txt`
 - Payment gateway (separate project): `docs/PAYMENT_GATEWAY_PROJECT.md`
-- **Operator raffle platform (build after):** `/var/www/Kenji-raffle/docs/PROJECT_PLAN_2.md`
-- SSH details: `ssh.txt`
+- **Operator raffle platform:** `/var/www/Kenji-raffle` — live at `https://api.force42.com`, `https://platform.force42.com`, tenant `*.force42.com`
 - README: project purpose and stakeholder next steps

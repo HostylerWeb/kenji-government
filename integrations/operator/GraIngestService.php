@@ -10,6 +10,7 @@
  * Env (.env):
  *   GRA_INGEST_ENABLED=true
  *   GRA_INGEST_URL=http://localhost:4001/v1
+ *   Production: GRA_INGEST_URL=https://ingest.force42.com/v1
  *   GRA_API_KEY=gra_sandbox_op001_devkey0001
  *   GRA_HMAC_SECRET=sandbox_hmac_op001_secret_32chars_min
  *   GRA_OPERATOR_EXTERNAL_ID=op-001

@@ -12,6 +12,13 @@ Operator platform → HTTPS POST → GRA Ingest API (port 4001)
 
 Monthly returns are queued for async processing. Real-time ticket and payment events are processed immediately and pushed to the staff console via Server-Sent Events.
 
+**Ingest base URL**
+
+| Environment | Base URL |
+|-------------|----------|
+| Production | `https://ingest.force42.com/v1` |
+| Local dev | `http://localhost:4001/v1` |
+
 **Kenji Raffle (multi-tenant SaaS)** uses an **async queue + platform relay** pattern instead of synchronous cURL from each checkout: tenant sites enqueue `gra_outbound_events`; a central worker signs and POSTs to ingest. See `Kenji-raffle/docs/GRA_INTEGRATION_ARCHITECTURE.md`. The PHP integration kit (`integrations/operator/GraIngestService.php`) remains valid for single-site operators.
 
 ## 1. Obtain API credentials

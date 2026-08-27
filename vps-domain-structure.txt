@@ -66,12 +66,11 @@ customers.force42.com
   Same tenant web app (:3002); hostname routing picks the operator.
 
 
-Payment gateway (kenji-gateway) — NOT DEPLOYED YET
+Payment gateway (kenji-gateway) — LIVE
 ---------------------------------------------------
 pay.force42.com
-  Payment gateway (:4003). STUB PAGE ONLY for now.
-  Planned: checkout redirect from raffle sites. Card/M-Pesa processing, tax split,
-  escrow, callback to raffle, notify GRA at ingest.force42.com.
+  Payment gateway (:4003). LIVE
+  Checkout redirect from raffle sites. Test card 4242…4242; notifies GRA at ingest.force42.com.
 
 
 Traffic flow (summary)
@@ -93,8 +92,10 @@ Apache vhosts:
   force42-test-ssl.conf, 00-pay-force42.conf         → apex, www, pay stub
 SSH:               see ssh.txt
 
-Status summary (2026-08-24)
+Status summary (2026-08-26)
 ---------------------------
 LIVE:     console, ingest, platform, api, customers, *.force42.com (tenant web)
-STUB:     force42.com, www.force42.com, pay.force42.com
-NOT YET:  kenji-gateway on pay.force42.com
+          Raffle security hardening deployed (Helmet, CORS allowlist, protected KYC)
+STUB:     force42.com, www.force42.com
+LIVE:     pay.force42.com (kenji-gateway :4003), live checkout on demo VPS (test card)
+OBSOLETE: compliance.srv1781529.hstgr.cloud, /var/www/government — do not use

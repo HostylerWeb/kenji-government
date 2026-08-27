@@ -32,6 +32,7 @@ import { useNavBadges } from "@/lib/use-nav-badges";
 import type { NavBadges } from "@/lib/api";
 
 const navBadgeKeyByHref: Partial<Record<string, keyof NavBadges>> = {
+  "/applications": "applications",
   "/submissions": "submissions",
   "/compliance": "compliance",
   "/enforcement": "enforcement",

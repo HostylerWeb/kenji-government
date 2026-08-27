@@ -238,6 +238,7 @@ export class DashboardService {
   async navBadges() {
     const [
       pendingSubmissions,
+      pendingApplications,
       nonCompliant,
       atRisk,
       openCases,
@@ -246,6 +247,9 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.client.submissions.count({
         where: { status: { in: ["pending", "revision_requested"] } },
+      }),
+      this.prisma.client.operator_applications.count({
+        where: { status: { in: ["submitted", "under_review"] } },
       }),
       this.prisma.client.operators.count({
         where: { status: "active", compliance_status: "non_compliant" },
@@ -269,6 +273,7 @@ export class DashboardService {
     }).length;
 
     return {
+      applications: pendingApplications,
       submissions: pendingSubmissions,
       compliance: nonCompliant + atRisk,
       enforcement,

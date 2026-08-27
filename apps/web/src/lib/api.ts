@@ -26,19 +26,47 @@ async function parseResponse<T>(
   options?: { authenticated?: boolean },
 ): Promise<T> {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const contentType = response.headers.get("content-type") ?? "";
+  let data: unknown = null;
+
+  if (text) {
+    if (contentType.includes("application/json") || text.trimStart().startsWith("{")) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new ApiError(
+          response.ok
+            ? "The server returned an invalid response. Please try again."
+            : `The server returned an unexpected response (${response.status}). Please try again later.`,
+          response.status || 500,
+        );
+      }
+    } else if (!response.ok) {
+      const plain = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const titleMatch = plain.match(/Service Unavailable|Bad Gateway|Gateway Timeout|Not Found/i);
+      const message = titleMatch
+        ? `The sign-in service is temporarily unavailable (${titleMatch[0]}). Please try again in a few minutes.`
+        : `The sign-in service returned an unexpected response (${response.status}). Please try again later.`;
+      throw new ApiError(message, response.status || 500);
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 401 && options?.authenticated) {
       forceLogout("expired");
     }
 
+    const payload = data as { message?: unknown; error?: unknown } | null;
     const message =
-      data?.message ?? data?.error ?? `Request failed (${response.status})`;
+      payload?.message ?? payload?.error ?? `Request failed (${response.status})`;
     throw new ApiError(
       Array.isArray(message) ? message.join(", ") : String(message),
       response.status,
     );
+  }
+
+  if (data === null && text) {
+    throw new ApiError("The server returned an invalid response. Please try again.", 500);
   }
 
   return data as T;
@@ -621,6 +649,7 @@ export async function getDashboardAlerts(token: string) {
 }
 
 export interface NavBadges {
+  applications: number;
   submissions: number;
   compliance: number;
   enforcement: number;

@@ -1,12 +1,14 @@
 # GRA portal — VPS deployment
 
 Deploy path: `/var/www/kenji-government`  
-Staff URL: `https://srv1781529.hstgr.cloud` (main domain)  
-Ingest URL: `https://ingest.srv1781529.hstgr.cloud` (planned subdomain)
+Staff URL: `https://console.force42.com`  
+Ingest URL: `https://ingest.force42.com`  
+Domain map: `vps-domain-structure.txt` · SSH: `ssh.txt`
 
 ## Prerequisites
 
-- Ubuntu 22/24, Node 22, PostgreSQL 16, Redis, Nginx
+- Ubuntu 22/24, Node 22, Docker (Postgres/Redis/MinIO), Apache 2.4
+- Cloudflare origin cert at `/etc/ssl/cloudflare/force42.pem`
 - See `docs/PROJECT_PLAN.md` §3 for package list
 
 ## 1. Bootstrap server (once)
@@ -16,7 +18,7 @@ Ingest URL: `https://ingest.srv1781529.hstgr.cloud` (planned subdomain)
 bash scripts/vps-bootstrap.sh
 ```
 
-Creates DB user `kenji_government`, installs Node 22, Nginx, PM2 (optional).
+Creates DB user `kenji_government`, installs Node 22, PM2 (optional).
 
 ## 2. Clone and configure
 
@@ -26,7 +28,7 @@ git clone git@github.com:HostylerWeb/kenji-government.git kenji-government
 cd kenji-government
 cp .env.example .env
 # Edit: DATABASE_URL, REDIS_URL, JWT secrets, GOVERNMENT_TAX_RATE, NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
-bash scripts/write-production-web-env.sh   # writes apps/web/.env.local (never localhost)
+CONSOLE_DOMAIN=console.force42.com bash scripts/write-production-web-env.sh
 npm ci
 npm run build
 npm run db:migrate
@@ -38,12 +40,16 @@ npm run db:seed   # optional for demo data
 ## 2b. Deploy from local machine
 
 ```bash
+cd /var/www/kenji-government
+
 # Git-based full deploy (recommended)
-bash scripts/vps-deploy.sh
+SSHPASS='...' sshpass -e bash scripts/vps-deploy.sh
 
 # Or sync workspace without overwriting server env files
-bash scripts/vps-rsync-deploy.sh
+SSHPASS='...' sshpass -e bash scripts/vps-rsync-deploy.sh
 ```
+
+Override domains if needed: `CONSOLE_DOMAIN=console.force42.com INGEST_DOMAIN=ingest.force42.com`
 
 ## 3. Start with PM2
 
@@ -55,22 +61,24 @@ pm2 startup
 
 Ports: web `3000`, staff API `4000`, ingest `4001`.
 
-## 4. Nginx
+## 4. Apache
 
-Copy templates from `deploy/nginx/` and enable SSL (certbot):
+Templates in `deploy/apache/` are copied by `scripts/vps-deploy.sh`:
 
-- `console.conf.template` → staff console + `/api` proxy
-- `ingest.conf.template` → operator ingest API only
+- `console.conf.template` → `/etc/apache2/sites-available/gra-force42-console.conf`
+- `ingest.conf.template` → `/etc/apache2/sites-available/gra-force42-ingest.conf`
+
+Legacy Nginx templates remain in `deploy/nginx/` for reference only.
 
 ## 5. Smoke test
 
 ```bash
-./scripts/production-smoke.sh https://srv1781529.hstgr.cloud
+./scripts/production-smoke.sh https://console.force42.com https://console.force42.com/api
 ```
 
 ## 6. Operator production ingest (Phase 9.1)
 
-1. Ensure ingest subdomain points to port 4001 (Nginx).
+1. Ingest is live at `https://ingest.force42.com`.
 2. Give each operator site API key + HMAC from GRA admin DB.
 3. Operator copies `integrations/operator/GraIngestService.php` — see `integrations/operator/README.md`.
 

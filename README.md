@@ -1,33 +1,47 @@
-# Kenya Government — Raffle & Competition Website Oversight Platform
+# Kenya Government — GRA Raffle & Competition Oversight Platform
 
-**Standalone initiative.** This folder is **not** part of any operator codebase (e.g. CompetitionGo). It holds design intent, structure, and phased delivery notes for a future regulatory monitoring system.
+**GRA supervisory portal** — staff console, operator ingest API, compliance monitoring, and payment oversight for licensed raffle/competition operators in Kenya.
 
-## Purpose
+## Production (Force42 VPS)
 
-Give authorised Kenyan government teams a **single supervisory dashboard** to:
+| Service | URL |
+|---------|-----|
+| Staff console | https://console.force42.com |
+| Staff API | https://console.force42.com/api |
+| Operator ingest | https://ingest.force42.com |
 
-- Register and profile **operators** (legal entities running raffle/competition websites).
-- Monitor **commercial activity**: tickets sold, revenue, prizes, expenses, net positions (as defined by law and reporting standards).
-- Track **tax and levy compliance**: filings, assessments, payments, arrears, supporting invoices/receipts.
-- Run **enforcement**: notices, reminders, suspension/activation of listed sites (with audit trail).
-- Maintain **auditability**: who did what, when; exports for inspections and partner agencies.
+Deploy path on VPS: `/var/www/kenji-government` · SSH and deploy: `ssh.txt`, `docs/DEPLOY.md` · Domain map: `vps-domain-structure.txt`
 
-## Contents of this folder
+## Local development
+
+```bash
+cd /var/www/kenji-government
+cp .env.example .env
+docker compose up -d
+npm ci && npm run db:migrate && npm run db:seed
+npm run dev:web    # :3000
+npm run dev:api    # :4000
+npm run dev:ingest # :4001
+```
+
+Full guide: [`instructions.md`](instructions.md)
+
+## Key docs
 
 | Document | Description |
 |----------|-------------|
-| [docs/PLATFORM_STRUCTURE.md](docs/PLATFORM_STRUCTURE.md) | Logical modules, boundaries, suggested repo layout |
-| [docs/DATA_AND_INTEGRATIONS.md](docs/DATA_AND_INTEGRATIONS.md) | What data is collected, quality, operator reporting integration |
-| [docs/GOVERNANCE_AND_SECURITY.md](docs/GOVERNANCE_AND_SECURITY.md) | Roles, audit, residency, access — high level |
-| [docs/PHASED_ROADMAP.md](docs/PHASED_ROADMAP.md) | Suggested delivery phases and milestones |
+| [instructions.md](instructions.md) | Run locally, architecture, npm scripts |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | VPS deployment |
+| [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) | Phases, roadmap, architecture |
+| [docs/API.md](docs/API.md) | Operator ingest API spec |
+| [docs/OPERATOR_INTEGRATION.md](docs/OPERATOR_INTEGRATION.md) | Operator onboarding |
+| [integrations/operator/](integrations/operator/) | PHP ingest client for legacy operators |
 
-## Next steps (for stakeholders)
+## Related platforms (separate repos)
 
-1. Align **legal mapping**: which metrics are legally defined (GGR, stakes, prizes, levies) vs internal bookkeeping.
-2. Confirm **owning agency** and **data-sharing agreements** with operators.
-3. Choose **deployment model**: dedicated government cloud vs on-prem; Kenya data residency requirements.
-4. Pilot with **one voluntary operator** + manual CSV/API before scaling.
+| Repo | Role |
+|------|------|
+| `/var/www/Kenji-raffle` | Operator raffle sites — live at `*.force42.com`, `api.force42.com` |
+| `/var/www/kenji-gateway` | Payment gateway — live at **https://pay.force42.com** (`:4003` on VPS) |
 
----
-
-*This repository is documentation and planning only until an implementation repository is created.*
+Operators push signed events to GRA ingest; payment ledger rows arrive via the gateway at `POST /v1/gateway/notify`.

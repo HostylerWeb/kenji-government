@@ -333,14 +333,23 @@ npm run build -w @kenji-government/shared   # if shared types changed
 
 ---
 
-## Production / VPS (not automated yet)
+## Production / VPS
 
-Phase 1 VPS deploy: see `docs/DEPLOY.md` (items 1.26–1.31). Local instructions below are for development only.
+Live on Force42 VPS. Deploy from local machine:
 
-Planned production URLs:
+```bash
+SSHPASS='…' sshpass -e bash scripts/vps-deploy.sh
+```
 
-- Staff console: `console.*`
-- Operator ingest: `ingest.*`
+See `docs/DEPLOY.md`, `ssh.txt`, and `vps-domain-structure.txt`.
+
+| Service | Production URL |
+|---------|------------------|
+| Staff console | https://console.force42.com |
+| Staff API | https://console.force42.com/api |
+| Operator ingest | https://ingest.force42.com |
+
+Local instructions above are for development only.
 
 ---
 
